@@ -78,7 +78,7 @@
   /* ---------- MIDDLE BOARD ---------- */
   .main{flex:1;display:flex;flex-direction:column;align-items:center;padding:40px 24px}
   .board{width:100%;max-width:440px}
-  .board-title{font-size:15px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin-bottom:20px;text-align:center}
+  .board-title{font-size:15px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin-bottom:20px;text-align:center;line-height:1.5;text-wrap:balance}
 
   .card{
     display:flex;align-items:baseline;justify-content:space-between;gap:14px;
@@ -108,6 +108,7 @@
     .sidebar{width:100%;height:auto;border-right:none;border-bottom:1px solid var(--line)}
     .people{max-height:44vh}
     .main{padding:32px 20px}
+    .board-title{max-width:15ch;margin-left:auto;margin-right:auto;line-height:1.7}
   }
 </style>
 </head>
