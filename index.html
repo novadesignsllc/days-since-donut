@@ -48,20 +48,27 @@
   .person:hover{background:var(--hover)}
   .person .name{
     font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;
-    text-overflow:ellipsis;cursor:context-menu;flex:1;user-select:none;
+    text-overflow:ellipsis;flex:1;user-select:none;
   }
   .person .tap{
-    display:flex;align-items:center;gap:10px;flex-shrink:0;
+    display:flex;align-items:center;gap:6px;flex-shrink:0;
   }
-  .person .count{font-size:14px;font-weight:600;color:var(--muted);min-width:20px;text-align:right}
-  .person .plus{
-    width:32px;height:32px;border-radius:9px;border:1px solid var(--line);
-    background:#fff;font-size:20px;font-weight:400;line-height:1;color:var(--ink);
+  .person .count{font-size:14px;font-weight:600;color:var(--muted);min-width:18px;text-align:right;margin-right:2px}
+  .person .step{
+    width:30px;height:30px;border-radius:9px;border:1px solid var(--line);
+    background:#fff;font-size:19px;font-weight:400;line-height:1;color:var(--ink);
     cursor:pointer;display:flex;align-items:center;justify-content:center;
     transition:.1s;
   }
-  .person .plus:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
-  .person .plus:active{transform:scale(.9)}
+  .person .step:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .person .step:active{transform:scale(.9)}
+  .person .rst{
+    height:30px;padding:0 10px;border-radius:9px;border:1px solid var(--line);
+    background:#fff;font-family:'Lexend';font-size:12px;font-weight:600;color:var(--muted);
+    cursor:pointer;transition:.1s;
+  }
+  .person .rst:hover{background:#e5523b;color:#fff;border-color:#e5523b}
+  .person .rst:active{transform:scale(.94)}
 
   .side-empty{padding:24px 16px;color:var(--muted);font-size:13px;line-height:1.6}
 
@@ -107,7 +114,7 @@
 <aside class="sidebar">
   <div class="side-head">
     <h1>People</h1>
-    <p>Tap + to add a day. Right-click a name to set a starting number.</p>
+    <p>Tap + or − to change the count. Reset sets it back to 0.</p>
   </div>
   <div class="addbar">
     <input id="nameInput" placeholder="Add a person" onkeydown="if(event.key==='Enter')addPerson()">
@@ -193,18 +200,20 @@ function bump(id){
   const p=state.people.find(x=>x.id===id);if(!p)return;
   p.count++;save();render();
 }
-function setStart(id){
+function dec(id){
   const p=state.people.find(x=>x.id===id);if(!p)return;
-  const v=prompt(`Set the donut count for ${p.name}:`, p.count);
-  if(v===null)return;
-  const n=parseInt(v,10);
-  if(!isNaN(n)&&n>=0){p.count=n;save();render();}
+  if(p.count>0){p.count--;save();render();}
+}
+function reset(id){
+  const p=state.people.find(x=>x.id===id);if(!p)return;
+  if(p.count===0)return;
+  p.count=0;save();render();
 }
 
 function render(){renderSidebar();renderBoard();}
 
 // Inline onclick handlers live on window; module scope is private by default.
-Object.assign(window, {addPerson, removePerson, bump, setStart});
+Object.assign(window, {addPerson, removePerson, bump, dec, reset});
 
 function renderSidebar(){
   const host=document.getElementById('peopleList');
@@ -215,10 +224,12 @@ function renderSidebar(){
   host.innerHTML=state.people.map(p=>`
     <div class="person">
       <button class="remove" title="Remove" onclick="removePerson('${p.id}')">&times;</button>
-      <span class="name" oncontextmenu="event.preventDefault();setStart('${p.id}')" title="Right-click to set a starting number">${esc(p.name)}</span>
+      <span class="name">${esc(p.name)}</span>
       <span class="tap">
         <span class="count">${p.count}</span>
-        <button class="plus" title="Add a day" onclick="bump('${p.id}')">+</button>
+        <button class="step" title="Subtract one" onclick="dec('${p.id}')">&minus;</button>
+        <button class="step" title="Add one" onclick="bump('${p.id}')">+</button>
+        <button class="rst" title="Reset to 0" onclick="reset('${p.id}')">Reset</button>
       </span>
     </div>`).join('');
 }
