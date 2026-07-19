@@ -124,17 +124,60 @@
   </div>
 </main>
 
-<script>
-const KEY='daysSince.v1';
-let state=load();
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, onSnapshot, setDoc }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-function load(){
-  try{const r=localStorage.getItem(KEY);if(r)return JSON.parse(r);}catch(e){}
+const firebaseConfig = {
+  apiKey: "AIzaSyDl8selnfPIqGcBTLkk1INry-Invp3W6IU",
+  authDomain: "donut-tracker-942df.firebaseapp.com",
+  projectId: "donut-tracker-942df",
+  storageBucket: "donut-tracker-942df.firebasestorage.app",
+  messagingSenderId: "1036050542274",
+  appId: "1:1036050542274:web:1fbebe3618ec9de2d2555b",
+  measurementId: "G-4CSJ9LJET9"
+};
+
+// Secret board id — this one document holds all your people.
+const BOARD_ID = "7534c7a2c2a613d9183e400f";
+const CACHE_KEY = 'daysSince.cache';
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const boardRef = doc(db, "boards", BOARD_ID);
+
+let state = loadCache();          // instant paint from local cache
+let ready = false;                // becomes true after first Firestore snapshot
+
+function loadCache(){
+  try{const r=localStorage.getItem(CACHE_KEY);if(r)return JSON.parse(r);}catch(e){}
   return {people:[]};
 }
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state));}catch(e){}}
+function cache(){try{localStorage.setItem(CACHE_KEY,JSON.stringify(state));}catch(e){}}
 function uid(){return Math.random().toString(36).slice(2,9);}
 function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// Push the whole board to Firestore (last-write-wins). Cache locally too.
+function save(){
+  cache();
+  setDoc(boardRef, {people: state.people}).catch(err=>console.warn('save failed', err));
+}
+
+// Live sync: any change from any device updates every open device.
+onSnapshot(boardRef, snap=>{
+  ready = true;
+  if(snap.exists()){
+    const data = snap.data();
+    state = {people: Array.isArray(data.people) ? data.people : []};
+  } else {
+    // First run — create the empty board document.
+    setDoc(boardRef, {people: []}).catch(err=>console.warn('init failed', err));
+    state = {people: []};
+  }
+  cache();
+  render();
+}, err=>console.warn('snapshot error', err));
 
 function addPerson(){
   const el=document.getElementById('nameInput');
@@ -152,13 +195,16 @@ function bump(id){
 }
 function setStart(id){
   const p=state.people.find(x=>x.id===id);if(!p)return;
-  const v=prompt(`Set the day count for ${p.name}:`, p.count);
+  const v=prompt(`Set the donut count for ${p.name}:`, p.count);
   if(v===null)return;
   const n=parseInt(v,10);
   if(!isNaN(n)&&n>=0){p.count=n;save();render();}
 }
 
 function render(){renderSidebar();renderBoard();}
+
+// Inline onclick handlers live on window; module scope is private by default.
+Object.assign(window, {addPerson, removePerson, bump, setStart});
 
 function renderSidebar(){
   const host=document.getElementById('peopleList');
