@@ -27,7 +27,7 @@
   /* ---------- FALLING DONUTS BACKGROUND ---------- */
   .donut-rain{position:fixed;inset:0;overflow:hidden;pointer-events:none;z-index:0}
   .donut-rain span{
-    position:absolute;top:-12vh;opacity:.5;line-height:1;
+    position:absolute;top:-12vh;opacity:.25;line-height:1;
     will-change:transform;animation:donutfall linear infinite;
   }
   @keyframes donutfall{
@@ -145,7 +145,7 @@
     <button onclick="addPerson()">+</button>
   </div>
   <div class="people" id="peopleList"></div>
-  <div class="side-foot">Days Since Last Donut · v1.1.1</div>
+  <div class="side-foot">Days Since Last Donut · v1.1.2</div>
 </aside>
 
 <!-- MIDDLE BOARD -->
@@ -243,7 +243,7 @@ Object.assign(window, {addPerson, removePerson, bump, dec, reset});
 // Falling donuts background — 🍩 emoji drifting down at ~50% opacity.
 function makeRain(){
   const host=document.getElementById('donutRain');
-  const COUNT=50;
+  const COUNT=30;
   let html='';
   for(let i=0;i<COUNT;i++){
     const left=Math.random()*100;                 // horizontal position (vw)
