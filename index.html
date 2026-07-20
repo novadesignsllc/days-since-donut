@@ -111,6 +111,16 @@
   .person:hover .remove{opacity:.6}
   .remove:hover{opacity:1;color:#e5523b}
 
+  /* rename + drag-to-reorder */
+  .person .name{cursor:grab}
+  .person.dragging{opacity:.45}
+  .person.drag-over{box-shadow:inset 0 2px 0 var(--ink)}
+  .name-edit{
+    flex:1;min-width:0;padding:6px 8px;border:1px solid var(--ink);border-radius:8px;
+    font-family:'Lexend';font-size:15px;font-weight:500;color:var(--ink);
+  }
+  .name-edit:focus{outline:none}
+
   /* ---------- BOTTOM TAB BAR ---------- */
   .tabbar{
     position:fixed;bottom:0;left:0;right:0;height:56px;z-index:20;
@@ -333,6 +343,48 @@ function reset(id){
   p.count=0;save();render();
 }
 
+/* --------- rename people (double-click) --------- */
+let editingId=null;
+function startRename(id){
+  editingId=id;render();
+  requestAnimationFrame(()=>{const el=document.querySelector('.name-edit');if(el){el.focus();el.select();}});
+}
+function commitRename(id,val){
+  if(editingId!==id)return;            // already cancelled/committed
+  editingId=null;
+  const p=state.people.find(x=>x.id===id);
+  const n=(val||'').trim();
+  if(p&&n)p.name=n;
+  save();render();
+}
+function cancelRename(){editingId=null;render();}
+
+/* --------- drag to reorder people --------- */
+let dragId=null;
+function onDragStart(e,id){
+  dragId=id;e.dataTransfer.effectAllowed='move';
+  try{e.dataTransfer.setData('text/plain',id);}catch(_){}
+  e.currentTarget.classList.add('dragging');
+}
+function onDragEnd(){
+  dragId=null;
+  document.querySelectorAll('.person.dragging,.person.drag-over')
+    .forEach(el=>el.classList.remove('dragging','drag-over'));
+}
+function onDragOver(e){e.preventDefault();e.dataTransfer.dropEffect='move';}
+function onDragEnter(e){if(dragId)e.currentTarget.classList.add('drag-over');}
+function onDragLeave(e){e.currentTarget.classList.remove('drag-over');}
+function onDrop(e,targetId){
+  e.preventDefault();
+  if(dragId&&dragId!==targetId){
+    const arr=state.people;
+    const from=arr.findIndex(p=>p.id===dragId);
+    const to=arr.findIndex(p=>p.id===targetId);
+    if(from>-1&&to>-1){const [m]=arr.splice(from,1);arr.splice(to,0,m);save();}
+  }
+  onDragEnd();render();
+}
+
 /* ---------------- PIPELINE ---------------- */
 
 // Local date helpers (keep everything in the user's own timezone).
@@ -406,6 +458,8 @@ function render(){renderSidebar();renderBoard();renderReps();renderApptForm();re
 // Inline onclick handlers live on window; module scope is private by default.
 Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
+  startRename, commitRename, cancelRename,
+  onDragStart, onDragEnd, onDragOver, onDragEnter, onDragLeave, onDrop,
   addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab
 });
 
@@ -416,9 +470,16 @@ function renderSidebar(){
     return;
   }
   host.innerHTML=state.people.map(p=>`
-    <div class="person">
+    <div class="person" draggable="true"
+      ondragstart="onDragStart(event,'${p.id}')" ondragend="onDragEnd(event)"
+      ondragover="onDragOver(event)" ondragenter="onDragEnter(event)"
+      ondragleave="onDragLeave(event)" ondrop="onDrop(event,'${p.id}')">
       <button class="remove" title="Remove" onclick="removePerson('${p.id}')">&times;</button>
-      <span class="name">${esc(p.name)}</span>
+      ${editingId===p.id
+        ? `<input class="name-edit" value="${esc(p.name)}"
+             onblur="commitRename('${p.id}',this.value)"
+             onkeydown="if(event.key==='Enter'){this.blur()}else if(event.key==='Escape'){cancelRename()}">`
+        : `<span class="name" title="Drag to reorder · double-click to rename" ondblclick="startRename('${p.id}')">${esc(p.name)}</span>`}
       <span class="tap">
         <span class="count">${p.count}</span>
         <button class="step" title="Subtract one" onclick="dec('${p.id}')">&minus;</button>
