@@ -149,6 +149,7 @@
     padding:10px 14px;font-family:'Lexend';font-size:14px;font-weight:600;cursor:pointer;
   }
   .appt-form button:hover{opacity:.85}
+  .af-note{font-size:11px;font-weight:600;color:#2e9e5b;min-height:14px;padding:0 2px}
 
   /* ---------- PIPELINE: day sections ---------- */
   .pipe-wrap{max-width:500px}
@@ -408,10 +409,11 @@
     <div class="appt-form">
       <div class="af-title">Add appointment</div>
       <select id="apRep"></select>
-      <select id="apDay"></select>
+      <input type="date" id="apDay">
       <input id="apName" placeholder="Customer first name" onkeydown="if(event.key==='Enter')addAppt()">
       <input id="apTime" placeholder="Time (e.g. 2pm)" onkeydown="if(event.key==='Enter')addAppt()">
       <button onclick="addAppt()">Add appointment</button>
+      <div class="af-note" id="apNote"></div>
     </div>
     <div class="side-foot">Pipeline · v1.2.0</div>
   </aside>
@@ -601,6 +603,9 @@ function addAppt(){
   const time=document.getElementById('apTime').value.trim();
   if(!repId||!date||!name)return;
   state.appts.push({id:uid(),repId,date,name,time,confirmed:false});
+  // Confirm the save — future dates won't show on the 3-day board yet.
+  const note=document.getElementById('apNote');
+  if(note) note.textContent=`Added ✓  ${name} · ${shortDate(date)}${time?` · ${time}`:''}`;
   document.getElementById('apName').value='';
   document.getElementById('apTime').value='';
   document.getElementById('apName').focus();
@@ -750,17 +755,16 @@ function renderRepModal(){
 function renderApptForm(){
   const repSel=document.getElementById('apRep');
   const daySel=document.getElementById('apDay');
-  const prevRep=repSel.value, prevDay=daySel.value;
+  const prevRep=repSel.value;
 
   repSel.innerHTML = state.reps.length
     ? state.reps.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')
     : `<option value="">Add a rep first</option>`;
-
-  const days=nextDays(3);
-  daySel.innerHTML=days.map((d,i)=>`<option value="${ymd(d)}">${esc(dayLabel(d,i))}</option>`).join('');
-
   if(prevRep && state.reps.some(r=>r.id===prevRep)) repSel.value=prevRep;
-  if(prevDay && days.some(d=>ymd(d)===prevDay)) daySel.value=prevDay;
+
+  // Date picker: default to today, allow any future date. Preserve a chosen value.
+  daySel.min = ymd(nextDays(1)[0]);
+  if(!daySel.value) daySel.value = daySel.min;
 }
 
 function renderPipe(){
