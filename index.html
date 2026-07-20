@@ -22,12 +22,16 @@
     touch-action:manipulation;
   }
   button{touch-action:manipulation}
-  body{min-height:100vh;display:flex}
+  body{min-height:100vh}
+
+  /* ---------- VIEWS (tab bodies) ---------- */
+  .view{display:none}
+  .view.active{display:flex}
 
   /* ---------- LEFT SIDEBAR ---------- */
   .sidebar{
     width:300px;flex-shrink:0;border-right:1px solid var(--line);
-    height:100vh;display:flex;flex-direction:column;
+    height:calc(100vh - 56px);display:flex;flex-direction:column;
   }
   .side-head{padding:24px 20px 14px}
   .side-head h1{font-size:15px;font-weight:700;letter-spacing:.01em}
@@ -80,7 +84,7 @@
     font-size:11px;font-weight:500;letter-spacing:.02em}
 
   /* ---------- MIDDLE BOARD ---------- */
-  .main{flex:1;display:flex;flex-direction:column;align-items:center;padding:40px 24px}
+  .main{flex:1;display:flex;flex-direction:column;align-items:center;padding:40px 24px 90px;min-height:calc(100vh - 56px)}
   .board{width:100%;max-width:440px}
   .board-title{font-size:15px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin-bottom:20px;text-align:center;line-height:1.5;text-wrap:balance}
 
@@ -107,38 +111,136 @@
   .person:hover .remove{opacity:.6}
   .remove:hover{opacity:1;color:#e5523b}
 
+  /* ---------- BOTTOM TAB BAR ---------- */
+  .tabbar{
+    position:fixed;bottom:0;left:0;right:0;height:56px;z-index:20;
+    display:flex;background:var(--bg);border-top:1px solid var(--line);
+  }
+  .tab{
+    flex:1;border:none;background:none;cursor:pointer;
+    font-family:'Lexend';font-size:14px;font-weight:600;color:var(--muted);
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    border-top:2px solid transparent;margin-top:-1px;
+  }
+  .tab.active{color:var(--ink);border-top-color:var(--ink)}
+  .tab:hover{background:var(--hover)}
+
+  /* ---------- PIPELINE: add-appointment form ---------- */
+  .appt-form{
+    padding:14px 16px 16px;border-top:1px solid var(--line);
+    display:flex;flex-direction:column;gap:8px;flex-shrink:0;
+  }
+  .appt-form .af-title{font-size:12px;font-weight:700;letter-spacing:.01em;margin-bottom:2px}
+  .appt-form select,.appt-form input{
+    padding:9px 11px;border:1px solid var(--line);border-radius:10px;
+    font-family:'Lexend';font-size:14px;font-weight:400;color:var(--ink);background:#fff;
+  }
+  .appt-form select:focus,.appt-form input:focus{outline:none;border-color:var(--ink)}
+  .appt-form button{
+    border:none;background:var(--ink);color:#fff;border-radius:10px;
+    padding:10px 14px;font-family:'Lexend';font-size:14px;font-weight:600;cursor:pointer;
+  }
+  .appt-form button:hover{opacity:.85}
+
+  /* ---------- PIPELINE: 3-day grid ---------- */
+  .pipe-wrap{max-width:760px;overflow-x:auto}
+  .pipe{width:100%;border-collapse:collapse}
+  .pipe th,.pipe td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
+  .pipe thead th{
+    font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
+    letter-spacing:.02em;background:var(--hover);white-space:nowrap;
+  }
+  .pipe thead th.today{color:var(--ink)}
+  .pipe td.rep{font-weight:600;font-size:14px;white-space:nowrap;background:#fff}
+  .pipe .empty{color:var(--muted)}
+  .pipe .appt{
+    display:flex;align-items:center;justify-content:space-between;gap:6px;
+    padding:2px 4px;border-radius:7px;margin:1px 0;
+  }
+  .pipe .appt:hover{background:var(--hover)}
+  .pipe .atxt{font-size:13px;cursor:pointer;flex:1;line-height:1.35}
+  .pipe .ax{
+    opacity:0;border:none;background:none;color:var(--muted);font-size:15px;
+    line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;
+  }
+  .pipe .appt:hover .ax{opacity:.55}
+  .pipe .ax:hover{opacity:1;color:#e5523b}
+  .pipe tfoot td{font-size:11px;font-weight:600;color:var(--muted);background:var(--hover)}
+
   @media (max-width:720px){
-    body{flex-direction:column}
+    .view{flex-direction:column}
     .sidebar{width:100%;height:auto;border-right:none;border-bottom:1px solid var(--line)}
     .people{max-height:44vh}
-    .main{padding:32px 20px}
+    .main{padding:32px 20px 90px}
     .board-title{line-height:1.7}
   }
 </style>
 </head>
 <body>
 
-<!-- LEFT SIDEBAR -->
-<aside class="sidebar">
-  <div class="side-head">
-    <h1>People</h1>
-    <p>Tap + or − to change the count. Reset sets it back to 0.</p>
-  </div>
-  <div class="addbar">
-    <input id="nameInput" placeholder="Add a person" onkeydown="if(event.key==='Enter')addPerson()">
-    <button onclick="addPerson()">+</button>
-  </div>
-  <div class="people" id="peopleList"></div>
-  <div class="side-foot">Days Since Last Donut · v1.1.5</div>
-</aside>
+<!-- ============ DONUTS VIEW ============ -->
+<div class="view active" id="view-donuts">
+  <!-- LEFT SIDEBAR -->
+  <aside class="sidebar">
+    <div class="side-head">
+      <h1>People</h1>
+      <p>Tap + or − to change the count. Reset sets it back to 0.</p>
+    </div>
+    <div class="addbar">
+      <input id="nameInput" placeholder="Add a person" onkeydown="if(event.key==='Enter')addPerson()">
+      <button onclick="addPerson()">+</button>
+    </div>
+    <div class="people" id="peopleList"></div>
+    <div class="side-foot">Days Since Last Donut · v1.2.0</div>
+  </aside>
 
-<!-- MIDDLE BOARD -->
-<main class="main">
-  <div class="board">
-    <div class="board-title">How Many Donuts<br>have we eaten in a row? 🍩</div>
-    <div id="board"></div>
-  </div>
-</main>
+  <!-- MIDDLE BOARD -->
+  <main class="main">
+    <div class="board">
+      <div class="board-title">How Many Donuts<br>have we eaten in a row? 🍩</div>
+      <div id="board"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ PIPELINE VIEW ============ -->
+<div class="view" id="view-pipeline">
+  <!-- LEFT SIDEBAR -->
+  <aside class="sidebar">
+    <div class="side-head">
+      <h1>Pipeline</h1>
+      <p>Manage reps and log appointments for the next 3 days.</p>
+    </div>
+    <div class="addbar">
+      <input id="repInput" placeholder="Add a rep" onkeydown="if(event.key==='Enter')addRep()">
+      <button onclick="addRep()">+</button>
+    </div>
+    <div class="people" id="repList"></div>
+    <div class="appt-form">
+      <div class="af-title">Add appointment</div>
+      <select id="apRep"></select>
+      <select id="apDay"></select>
+      <input id="apName" placeholder="Customer first name" onkeydown="if(event.key==='Enter')addAppt()">
+      <input id="apTime" placeholder="Time (e.g. 2pm)" onkeydown="if(event.key==='Enter')addAppt()">
+      <button onclick="addAppt()">Add appointment</button>
+    </div>
+    <div class="side-foot">Pipeline · v1.2.0</div>
+  </aside>
+
+  <!-- MIDDLE BOARD -->
+  <main class="main">
+    <div class="board pipe-wrap">
+      <div class="board-title">Our Pipeline · Next 3 Days</div>
+      <div id="pipeBoard"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ BOTTOM TAB BAR ============ -->
+<nav class="tabbar">
+  <button class="tab active" data-tab="donuts" onclick="switchTab('donuts')">🍩 Donuts</button>
+  <button class="tab" data-tab="pipeline" onclick="switchTab('pipeline')">📋 Pipeline</button>
+</nav>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -155,41 +257,53 @@ const firebaseConfig = {
   measurementId: "G-4CSJ9LJET9"
 };
 
-// Secret board id — this one document holds all your people.
+// Secret board id — this one document holds all your data (donuts + pipeline).
 const BOARD_ID = "7534c7a2c2a613d9183e400f";
 const CACHE_KEY = 'daysSince.cache';
+const TAB_KEY = 'daysSince.tab';
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const boardRef = doc(db, "boards", BOARD_ID);
 
+// Coerce any stored/synced doc into the full shape we expect.
+function normalize(s){
+  s = s || {};
+  return {
+    people: Array.isArray(s.people) ? s.people : [],   // donut counter
+    reps:   Array.isArray(s.reps)   ? s.reps   : [],   // pipeline reps
+    appts:  Array.isArray(s.appts)  ? s.appts  : []    // pipeline appointments
+  };
+}
+
 let state = loadCache();          // instant paint from local cache
 let ready = false;                // becomes true after first Firestore snapshot
 
 function loadCache(){
-  try{const r=localStorage.getItem(CACHE_KEY);if(r)return JSON.parse(r);}catch(e){}
-  return {people:[]};
+  try{const r=localStorage.getItem(CACHE_KEY);if(r)return normalize(JSON.parse(r));}catch(e){}
+  return normalize();
 }
 function cache(){try{localStorage.setItem(CACHE_KEY,JSON.stringify(state));}catch(e){}}
 function uid(){return Math.random().toString(36).slice(2,9);}
-function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 
 // Push the whole board to Firestore (last-write-wins). Cache locally too.
+// Must write ALL fields so saving one tool never wipes the other's data.
 function save(){
   cache();
-  setDoc(boardRef, {people: state.people}).catch(err=>console.warn('save failed', err));
+  setDoc(boardRef, {people: state.people, reps: state.reps, appts: state.appts})
+    .catch(err=>console.warn('save failed', err));
 }
 
 // Live sync: any change from any device updates every open device.
 onSnapshot(boardRef, snap=>{
   ready = true;
   if(snap.exists()){
-    const data = snap.data();
-    state = {people: Array.isArray(data.people) ? data.people : []};
+    state = normalize(snap.data());
   } else {
     // First run — create the empty board document.
-    setDoc(boardRef, {people: []}).catch(err=>console.warn('init failed', err));
-    state = {people: []};
+    state = normalize();
+    setDoc(boardRef, state).catch(err=>console.warn('init failed', err));
   }
   cache();
   render();
@@ -219,10 +333,81 @@ function reset(id){
   p.count=0;save();render();
 }
 
-function render(){renderSidebar();renderBoard();}
+/* ---------------- PIPELINE ---------------- */
+
+// Local date helpers (keep everything in the user's own timezone).
+function ymd(d){
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function nextDays(n){
+  const base=new Date(); base.setHours(0,0,0,0);
+  const out=[];
+  for(let i=0;i<n;i++){ const d=new Date(base); d.setDate(base.getDate()+i); out.push(d); }
+  return out;
+}
+function dayLabel(d,i){
+  const wd=d.toLocaleDateString('en-US',{weekday:'short'});
+  const md=`${d.getMonth()+1}/${d.getDate()}`;
+  return i===0 ? `Today · ${wd} ${md}` : `${wd} ${md}`;
+}
+// Parse "2pm" / "10:30am" / "14:00" to minutes for sorting; unparseable sorts last.
+function parseTime(s){
+  if(!s) return 1e9;
+  const m=String(s).trim().toLowerCase().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
+  if(!m) return 1e9;
+  let h=+m[1]; const min=m[2]?+m[2]:0; const ap=m[3];
+  if(ap==='pm'&&h!==12) h+=12;
+  if(ap==='am'&&h===12) h=0;
+  return h*60+min;
+}
+
+function addRep(){
+  const el=document.getElementById('repInput');
+  const name=el.value.trim();
+  if(!name)return;
+  state.reps.push({id:uid(),name});
+  el.value='';el.focus();save();render();
+}
+function removeRep(id){
+  state.reps=state.reps.filter(r=>r.id!==id);
+  state.appts=state.appts.filter(a=>a.repId!==id);  // drop their appointments too
+  save();render();
+}
+function addAppt(){
+  const repId=document.getElementById('apRep').value;
+  const date=document.getElementById('apDay').value;
+  const name=document.getElementById('apName').value.trim();
+  const time=document.getElementById('apTime').value.trim();
+  if(!repId||!date||!name)return;
+  state.appts.push({id:uid(),repId,date,name,time,confirmed:false});
+  document.getElementById('apName').value='';
+  document.getElementById('apTime').value='';
+  document.getElementById('apName').focus();
+  save();render();
+}
+function toggleAppt(id){
+  const a=state.appts.find(x=>x.id===id);if(!a)return;
+  a.confirmed=!a.confirmed;save();render();
+}
+function removeAppt(id){
+  state.appts=state.appts.filter(a=>a.id!==id);save();render();
+}
+
+// Tab switching (persisted so a refresh stays on the same tool).
+function switchTab(name){
+  try{localStorage.setItem(TAB_KEY,name);}catch(e){}
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id==='view-'+name));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
+}
+
+function render(){renderSidebar();renderBoard();renderReps();renderApptForm();renderPipe();}
 
 // Inline onclick handlers live on window; module scope is private by default.
-Object.assign(window, {addPerson, removePerson, bump, dec, reset});
+Object.assign(window, {
+  addPerson, removePerson, bump, dec, reset,
+  addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab
+});
 
 function renderSidebar(){
   const host=document.getElementById('peopleList');
@@ -259,6 +444,80 @@ function renderBoard(){
     </div>`).join('');
 }
 
+function renderReps(){
+  const host=document.getElementById('repList');
+  if(state.reps.length===0){
+    host.innerHTML=`<div class="side-empty">No reps yet. Add one above to get started.</div>`;
+    return;
+  }
+  host.innerHTML=state.reps.map(r=>`
+    <div class="person">
+      <button class="remove" title="Remove" onclick="removeRep('${r.id}')">&times;</button>
+      <span class="name">${esc(r.name)}</span>
+    </div>`).join('');
+}
+
+// Rebuild the add-appointment dropdowns, preserving the current selection.
+function renderApptForm(){
+  const repSel=document.getElementById('apRep');
+  const daySel=document.getElementById('apDay');
+  const prevRep=repSel.value, prevDay=daySel.value;
+
+  repSel.innerHTML = state.reps.length
+    ? state.reps.map(r=>`<option value="${r.id}">${esc(r.name)}</option>`).join('')
+    : `<option value="">Add a rep first</option>`;
+
+  const days=nextDays(3);
+  daySel.innerHTML=days.map((d,i)=>`<option value="${ymd(d)}">${esc(dayLabel(d,i))}</option>`).join('');
+
+  if(prevRep && state.reps.some(r=>r.id===prevRep)) repSel.value=prevRep;
+  if(prevDay && days.some(d=>ymd(d)===prevDay)) daySel.value=prevDay;
+}
+
+function renderPipe(){
+  const host=document.getElementById('pipeBoard');
+  if(state.reps.length===0){
+    host.innerHTML=`<div class="main-empty">
+      <h2>No reps yet</h2>
+      <p>Add reps on the left, then log appointments<br>for the next three days.</p>
+    </div>`;
+    return;
+  }
+  const days=nextDays(3);
+  const keys=days.map(ymd);
+
+  const head=`<tr><th class="corner">Rep</th>${
+    days.map((d,i)=>`<th class="${i===0?'today':''}">${esc(dayLabel(d,i))}</th>`).join('')
+  }</tr>`;
+
+  const body=state.reps.map(r=>{
+    const cells=keys.map(k=>{
+      const list=state.appts
+        .filter(a=>a.repId===r.id && a.date===k)
+        .sort((a,b)=>parseTime(a.time)-parseTime(b.time));
+      if(list.length===0) return `<td><span class="empty">—</span></td>`;
+      return `<td>${list.map(a=>{
+        const t=a.time?` · ${esc(a.time)}`:'';
+        return `<span class="appt">
+          <span class="atxt" title="Tap to toggle confirmed" onclick="toggleAppt('${a.id}')">${esc(a.name)}${t} ${a.confirmed?'✅':'❌'}</span>
+          <button class="ax" title="Remove" onclick="removeAppt('${a.id}')">&times;</button>
+        </span>`;
+      }).join('')}</td>`;
+    }).join('');
+    return `<tr><td class="rep">${esc(r.name)}</td>${cells}</tr>`;
+  }).join('');
+
+  const foot=`<tr><td class="rep">Total</td>${keys.map(k=>{
+    const list=state.appts.filter(a=>a.date===k);
+    const conf=list.filter(a=>a.confirmed).length;
+    return `<td>${list.length} appt · ${conf} ✅</td>`;
+  }).join('')}</tr>`;
+
+  host.innerHTML=`<table class="pipe"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
+}
+
+// Restore the last-used tab, then paint.
+switchTab(localStorage.getItem(TAB_KEY) || 'donuts');
 render();
 </script>
 </body>
