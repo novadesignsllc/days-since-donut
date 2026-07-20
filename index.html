@@ -187,6 +187,48 @@
   .ax:hover{opacity:1;color:#e5523b}
   @media (hover:none){.ax{opacity:.4}}
 
+  /* ---------- PIPELINE: clickable rep w/ tallies ---------- */
+  .rep-open{
+    flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;align-items:flex-start;
+    background:none;border:none;padding:0;cursor:pointer;font-family:'Lexend';text-align:left;
+  }
+  .rep-open .name{font-size:15px;font-weight:500;color:var(--ink);max-width:100%}
+  .rep-open:hover .name{text-decoration:underline}
+  .rep-stats{font-size:11px;font-weight:500;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+
+  /* ---------- REP DETAIL MODAL ---------- */
+  .modal-overlay{
+    position:fixed;inset:0;z-index:50;background:rgba(20,10,16,.42);
+    display:flex;align-items:center;justify-content:center;padding:20px;
+  }
+  .modal-overlay[hidden]{display:none}
+  .modal{
+    background:#fff;border-radius:18px;width:100%;max-width:520px;max-height:82vh;
+    overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,.28);
+  }
+  .modal-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:20px 22px 4px}
+  .modal-head h2{font-size:22px;font-weight:700;letter-spacing:-.01em}
+  .modal-x{border:none;background:none;font-size:26px;line-height:1;color:var(--muted);cursor:pointer;padding:0 4px}
+  .modal-x:hover{color:var(--ink)}
+  .stat-row{display:flex;gap:10px;padding:14px 22px 18px}
+  .stat{flex:1;background:var(--hover);border-radius:12px;padding:12px 8px;text-align:center}
+  .stat .s-n{display:block;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1}
+  .stat .s-l{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:5px}
+  .appt-list{border-top:1px solid var(--line)}
+  .ar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line)}
+  .ar:last-child{border-bottom:none}
+  .ar-main{min-width:0}
+  .ar-name{font-size:15px;font-weight:600}
+  .ar-meta{font-size:12px;color:var(--muted);margin-top:2px}
+  .ar-outcome{
+    flex-shrink:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;
+    font-family:'Lexend';font-size:13px;font-weight:600;color:var(--ink);background:#fff;cursor:pointer;
+  }
+  .ar-outcome:focus{outline:none;border-color:var(--ink)}
+  .ar-outcome.oc-sold{color:#1a7f42;border-color:#8fe0ac;background:#eafbf0}
+  .ar-outcome.oc-nosale{color:#9a6a00;border-color:#f0d68f;background:#fdf6e3}
+  .ar-outcome.oc-noshow,.ar-outcome.oc-cancelled{color:#b3402c;border-color:#f0b3a8;background:#fdeee9}
+
   /* ==================================================================
      DONUTS — "Sugar Rush" candy theme. Everything here is scoped to
      #view-donuts so the Pipeline tab is completely unaffected.
@@ -383,6 +425,11 @@
   </main>
 </div>
 
+<!-- ============ REP DETAIL MODAL ============ -->
+<div class="modal-overlay" id="repModal" hidden onclick="if(event.target===this)closeRep()">
+  <div class="modal" id="repModalBody"></div>
+</div>
+
 <!-- ============ BOTTOM TAB BAR ============ -->
 <nav class="tabbar">
   <button class="tab active" data-tab="donuts" onclick="switchTab('donuts')">🍩 Donuts</button>
@@ -574,13 +621,14 @@ function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
 }
 
-function render(){renderBoard();renderReps();renderApptForm();renderPipe();}
+function render(){renderBoard();renderReps();renderApptForm();renderPipe();renderRepModal();}
 
 // Inline onclick handlers live on window; module scope is private by default.
 Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
-  addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab
+  addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab,
+  openRep, closeRep, setOutcome
 });
 
 function renderBoard(){
@@ -621,11 +669,81 @@ function renderReps(){
     host.innerHTML=`<div class="side-empty">No reps yet. Add one above to get started.</div>`;
     return;
   }
-  host.innerHTML=state.reps.map(r=>`
-    <div class="person">
+  host.innerHTML=state.reps.map(r=>{
+    const s=repStats(r.id);
+    return `<div class="person">
       <button class="remove" title="Remove" onclick="removeRep('${r.id}')">&times;</button>
-      <span class="name">${esc(r.name)}</span>
-    </div>`).join('');
+      <button class="rep-open" title="View appointments & outcomes" onclick="openRep('${r.id}')">
+        <span class="name">${esc(r.name)}</span>
+        <span class="rep-stats">${s.leads} leads · ${s.sits} sits · ${s.sales} sales</span>
+      </button>
+    </div>`;
+  }).join('');
+}
+
+/* ---- rep outcomes: sits / sales / leads ---- */
+const OUTCOMES=[
+  {v:'pending',  label:'Pending'},
+  {v:'sold',     label:'Sold ✅'},
+  {v:'nosale',   label:'Sat · No Sale'},
+  {v:'noshow',   label:'No Show'},
+  {v:'cancelled',label:'Cancelled'}
+];
+// Sits = they sat down (sold or no-sale). Sales = sold. Leads = every appt.
+function repStats(id){
+  const appts=state.appts.filter(a=>a.repId===id);
+  const sits=appts.filter(a=>a.outcome==='sold'||a.outcome==='nosale').length;
+  const sales=appts.filter(a=>a.outcome==='sold').length;
+  return {leads:appts.length, sits, sales, close: sits?Math.round(sales/sits*100)+'%':'—'};
+}
+function setOutcome(id,v){
+  const a=state.appts.find(x=>x.id===id);if(!a)return;
+  a.outcome=v;save();render();
+}
+
+// Build a local Date from a "YYYY-MM-DD" key (avoids UTC shift).
+function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d);}
+function shortDate(k){const d=dateFromKey(k);return `${d.toLocaleDateString('en-US',{weekday:'short'})} ${d.getMonth()+1}/${d.getDate()}`;}
+
+let openRepId=null;
+function openRep(id){openRepId=id;renderRepModal();}
+function closeRep(){openRepId=null;renderRepModal();}
+
+function renderRepModal(){
+  const overlay=document.getElementById('repModal');
+  const rep=state.reps.find(r=>r.id===openRepId);
+  if(!rep){overlay.setAttribute('hidden','');return;}
+  overlay.removeAttribute('hidden');
+  const s=repStats(rep.id);
+  // Most recent first, then by time.
+  const appts=state.appts.filter(a=>a.repId===rep.id)
+    .sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : parseTime(a.time)-parseTime(b.time));
+
+  const list = appts.length ? appts.map(a=>{
+    const oc=a.outcome||'pending';
+    const opts=OUTCOMES.map(o=>`<option value="${o.v}" ${oc===o.v?'selected':''}>${o.label}</option>`).join('');
+    const meta=`${shortDate(a.date)}${a.time?` · ${esc(a.time)}`:''}`;
+    return `<div class="ar">
+      <div class="ar-main">
+        <div class="ar-name">${esc(a.name)} ${a.confirmed?'✅':'❌'}</div>
+        <div class="ar-meta">${meta}</div>
+      </div>
+      <select class="ar-outcome oc-${oc}" onchange="setOutcome('${a.id}',this.value)">${opts}</select>
+    </div>`;
+  }).join('') : `<div class="pl-empty" style="padding:22px">No appointments logged yet.</div>`;
+
+  document.getElementById('repModalBody').innerHTML=`
+    <div class="modal-head">
+      <h2>${esc(rep.name)}</h2>
+      <button class="modal-x" title="Close" onclick="closeRep()">&times;</button>
+    </div>
+    <div class="stat-row">
+      <div class="stat"><span class="s-n">${s.leads}</span><span class="s-l">Leads</span></div>
+      <div class="stat"><span class="s-n">${s.sits}</span><span class="s-l">Sits</span></div>
+      <div class="stat"><span class="s-n">${s.sales}</span><span class="s-l">Sales</span></div>
+      <div class="stat"><span class="s-n">${s.close}</span><span class="s-l">Close</span></div>
+    </div>
+    <div class="appt-list">${list}</div>`;
 }
 
 // Rebuild the add-appointment dropdowns, preserving the current selection.
@@ -685,6 +803,9 @@ function renderPipe(){
     </section>`;
   }).join('');
 }
+
+// Esc closes the rep detail modal.
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&openRepId)closeRep();});
 
 // Restore the last-used tab, then paint.
 switchTab(localStorage.getItem(TAB_KEY) || 'donuts');
