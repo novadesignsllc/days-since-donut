@@ -150,30 +150,42 @@
   }
   .appt-form button:hover{opacity:.85}
 
-  /* ---------- PIPELINE: 3-day grid ---------- */
-  .pipe-wrap{max-width:760px;overflow-x:auto}
-  .pipe{width:100%;border-collapse:collapse}
-  .pipe th,.pipe td{border:1px solid var(--line);padding:8px 10px;vertical-align:top;text-align:left}
-  .pipe thead th{
-    font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;
-    letter-spacing:.02em;background:var(--hover);white-space:nowrap;
+  /* ---------- PIPELINE: day sections ---------- */
+  .pipe-wrap{max-width:640px}
+  .pl-day{
+    border:1px solid var(--line);border-radius:14px;margin-bottom:16px;
+    overflow:hidden;background:#fff;
   }
-  .pipe thead th.today{color:var(--ink)}
-  .pipe td.rep{font-weight:600;font-size:14px;white-space:nowrap;background:#fff}
-  .pipe .empty{color:var(--muted)}
-  .pipe .appt{
-    display:flex;align-items:center;justify-content:space-between;gap:6px;
-    padding:2px 4px;border-radius:7px;margin:1px 0;
+  .pl-day.today{border-color:var(--ink)}
+  .pl-dayhead{
+    display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+    padding:12px 16px;background:var(--hover);border-bottom:1px solid var(--line);
   }
-  .pipe .appt:hover{background:var(--hover)}
-  .pipe .atxt{font-size:13px;cursor:pointer;flex:1;line-height:1.35}
-  .pipe .ax{
-    opacity:0;border:none;background:none;color:var(--muted);font-size:15px;
+  .pl-day.today .pl-dayhead{background:var(--ink);border-bottom-color:var(--ink)}
+  .pl-daylabel{font-size:13px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;color:var(--muted)}
+  .pl-day.today .pl-daylabel{color:#fff}
+  .pl-daycount{font-size:12px;font-weight:600;color:var(--muted);white-space:nowrap}
+  .pl-day.today .pl-daycount{color:#c9ccd1}
+  .pl-body{padding:2px 0}
+  .pl-row{
+    display:flex;gap:14px;padding:11px 16px;align-items:flex-start;
+    border-bottom:1px solid var(--line);
+  }
+  .pl-row:last-child{border-bottom:none}
+  .pl-rep{flex:0 0 128px;font-size:15px;font-weight:600;color:var(--ink);padding-top:4px;line-height:1.3}
+  .pl-appts{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+  .pl-empty{padding:14px 16px;color:var(--muted);font-size:13px;font-style:italic}
+
+  .appt{display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:8px}
+  .appt:hover{background:var(--hover)}
+  .atxt{font-size:15px;cursor:pointer;line-height:1.35;flex:1}
+  .ax{
+    opacity:0;border:none;background:none;color:var(--muted);font-size:16px;
     line-height:1;cursor:pointer;padding:0 2px;flex-shrink:0;
   }
-  .pipe .appt:hover .ax{opacity:.55}
-  .pipe .ax:hover{opacity:1;color:#e5523b}
-  .pipe tfoot td{font-size:11px;font-weight:600;color:var(--muted);background:var(--hover)}
+  .appt:hover .ax{opacity:.55}
+  .ax:hover{opacity:1;color:#e5523b}
+  @media (hover:none){.ax{opacity:.4}}
 
   /* ==================================================================
      DONUTS — "Sugar Rush" candy theme. Everything here is scoped to
@@ -643,36 +655,35 @@ function renderPipe(){
     return;
   }
   const days=nextDays(3);
-  const keys=days.map(ymd);
 
-  const head=`<tr><th class="corner">Rep</th>${
-    days.map((d,i)=>`<th class="${i===0?'today':''}">${esc(dayLabel(d,i))}</th>`).join('')
-  }</tr>`;
+  host.innerHTML=days.map((d,i)=>{
+    const k=ymd(d);
+    const dayAppts=state.appts.filter(a=>a.date===k);
+    const conf=dayAppts.filter(a=>a.confirmed).length;
+    // Only reps who actually have something this day — in rep order.
+    const reps=state.reps.filter(r=>dayAppts.some(a=>a.repId===r.id));
 
-  const body=state.reps.map(r=>{
-    const cells=keys.map(k=>{
-      const list=state.appts
-        .filter(a=>a.repId===r.id && a.date===k)
-        .sort((a,b)=>parseTime(a.time)-parseTime(b.time));
-      if(list.length===0) return `<td><span class="empty">—</span></td>`;
-      return `<td>${list.map(a=>{
+    const rows = reps.length ? reps.map(r=>{
+      const list=dayAppts.filter(a=>a.repId===r.id).sort((a,b)=>parseTime(a.time)-parseTime(b.time));
+      const chips=list.map(a=>{
         const t=a.time?` · ${esc(a.time)}`:'';
         return `<span class="appt">
           <span class="atxt" title="Tap to toggle confirmed" onclick="toggleAppt('${a.id}')">${esc(a.name)}${t} ${a.confirmed?'✅':'❌'}</span>
           <button class="ax" title="Remove" onclick="removeAppt('${a.id}')">&times;</button>
         </span>`;
-      }).join('')}</td>`;
-    }).join('');
-    return `<tr><td class="rep">${esc(r.name)}</td>${cells}</tr>`;
+      }).join('');
+      return `<div class="pl-row"><div class="pl-rep">${esc(r.name)}</div><div class="pl-appts">${chips}</div></div>`;
+    }).join('') : `<div class="pl-empty">No appointments yet</div>`;
+
+    const count = dayAppts.length ? `${dayAppts.length} appt · ${conf} ✅` : '';
+    return `<section class="pl-day ${i===0?'today':''}">
+      <div class="pl-dayhead">
+        <span class="pl-daylabel">${esc(dayLabel(d,i))}</span>
+        <span class="pl-daycount">${count}</span>
+      </div>
+      <div class="pl-body">${rows}</div>
+    </section>`;
   }).join('');
-
-  const foot=`<tr><td class="rep">Total</td>${keys.map(k=>{
-    const list=state.appts.filter(a=>a.date===k);
-    const conf=list.filter(a=>a.confirmed).length;
-    return `<td>${list.length} appt · ${conf} ✅</td>`;
-  }).join('')}</tr>`;
-
-  host.innerHTML=`<table class="pipe"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table>`;
 }
 
 // Restore the last-used tab, then paint.
