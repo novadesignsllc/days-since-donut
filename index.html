@@ -225,11 +225,11 @@
   .ar-conf{border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0;flex-shrink:0}
   .ar-name{flex:1;min-width:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ar-edit{display:flex;gap:8px}
-  .ar-edit input{
+  .ar-edit input,.ar-edit select{
     flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;
-    font-family:'Lexend';font-size:13px;color:var(--ink);background:#fff;
+    font-family:'Lexend';font-size:13px;color:var(--ink);background:#fff;cursor:pointer;
   }
-  .ar-edit input:focus{outline:none;border-color:var(--ink)}
+  .ar-edit input:focus,.ar-edit select:focus{outline:none;border-color:var(--ink)}
   .ar-outcome{
     flex-shrink:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;
     font-family:'Lexend';font-size:13px;font-weight:600;color:var(--ink);background:#fff;cursor:pointer;
@@ -420,8 +420,8 @@
       <select id="apRep"></select>
       <input id="apName" placeholder="Customer first name" onkeydown="if(event.key==='Enter')addAppt()">
       <div class="af-row">
-        <label class="af-field"><span>Date</span><input type="date" id="apDay"></label>
-        <label class="af-field"><span>Time</span><input type="time" id="apTime"></label>
+        <label class="af-field"><span>Date</span><input type="date" id="apDay" onchange="renderApptForm()"></label>
+        <label class="af-field"><span>Time</span><select id="apTime"></select></label>
       </div>
       <button onclick="addAppt()">Add appointment</button>
       <div class="af-note" id="apNote"></div>
@@ -609,6 +609,27 @@ function toTimeInput(t){
   return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
 }
 
+// Allowed appointment time slots for a given date (weekday-dependent).
+// Base 8am–8pm minus 10/1/4/7; no 8-9am Tue; nothing after 6pm on weekends.
+function timeSlots(dateKey){
+  let hours=[8,9,11,12,14,15,17,18,20];
+  const d=dateFromKey(dateKey); const wd=d.getDay();      // 0 Sun … 6 Sat
+  if(wd===2) hours=hours.filter(h=>h!==8&&h!==9);          // no 8am/9am Tuesdays
+  if(wd===0||wd===6) hours=hours.filter(h=>h<=18);         // weekends stop at 6pm
+  return hours.map(h=>`${String(h).padStart(2,'0')}:00`);
+}
+// Build the <option> list for a time dropdown. keepOffSlot=true retains a
+// current value that isn't a standard slot (e.g. an older/edited appt).
+function timeOptionsHtml(dateKey, current, keepOffSlot){
+  const vals=timeSlots(dateKey);
+  const cur=current?toTimeInput(current):'';
+  const inList=vals.includes(cur);
+  const all=(keepOffSlot && cur && !inList) ? [cur,...vals] : vals;
+  const sel=(inList || (keepOffSlot && cur)) ? cur : '';
+  const body=all.map(v=>`<option value="${v}" ${v===sel?'selected':''}>${formatTime(v)}</option>`).join('');
+  return `<option value="" ${sel?'':'selected'}>Time…</option>${body}`;
+}
+
 function addRep(){
   const el=document.getElementById('repInput');
   const name=el.value.trim();
@@ -658,7 +679,7 @@ Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
   addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab,
-  openRep, closeRep, setOutcome, setApptDate, setApptTime
+  openRep, closeRep, setOutcome, setApptDate, setApptTime, renderApptForm
 });
 
 function renderBoard(){
@@ -769,7 +790,7 @@ function renderRepModal(){
       </div>
       <div class="ar-edit">
         <input type="date" value="${a.date}" onchange="setApptDate('${a.id}',this.value)">
-        <input type="time" value="${toTimeInput(a.time)}" onchange="setApptTime('${a.id}',this.value)">
+        <select onchange="setApptTime('${a.id}',this.value)">${timeOptionsHtml(a.date,a.time,true)}</select>
       </div>
     </div>`;
   }).join('') : `<div class="pl-empty" style="padding:22px">No appointments logged yet.</div>`;
@@ -792,6 +813,7 @@ function renderRepModal(){
 function renderApptForm(){
   const repSel=document.getElementById('apRep');
   const daySel=document.getElementById('apDay');
+  const timeSel=document.getElementById('apTime');
   const prevRep=repSel.value;
 
   repSel.innerHTML = state.reps.length
@@ -802,6 +824,10 @@ function renderApptForm(){
   // Date picker: default to today, allow any future date. Preserve a chosen value.
   daySel.min = ymd(nextDays(1)[0]);
   if(!daySel.value) daySel.value = daySel.min;
+
+  // Time slots depend on the chosen date's weekday. Keep the selection if
+  // still valid for the date; otherwise fall back to "Time…".
+  timeSel.innerHTML = timeOptionsHtml(daySel.value, timeSel.value, false);
 }
 
 function renderPipe(){
