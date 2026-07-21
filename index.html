@@ -149,6 +149,9 @@
     padding:10px 14px;font-family:'Lexend';font-size:14px;font-weight:600;cursor:pointer;
   }
   .appt-form button:hover{opacity:.85}
+  .af-row{display:flex;gap:8px}
+  .af-field{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+  .af-field span{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em;padding-left:2px}
   .af-note{font-size:11px;font-weight:600;color:#2e9e5b;min-height:14px;padding:0 2px}
 
   /* ---------- PIPELINE: day sections ---------- */
@@ -216,11 +219,17 @@
   .stat .s-n{display:block;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1}
   .stat .s-l{display:block;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-top:5px}
   .appt-list{border-top:1px solid var(--line)}
-  .ar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 22px;border-bottom:1px solid var(--line)}
+  .ar{display:flex;flex-direction:column;gap:9px;padding:14px 22px;border-bottom:1px solid var(--line)}
   .ar:last-child{border-bottom:none}
-  .ar-main{min-width:0}
-  .ar-name{font-size:15px;font-weight:600}
-  .ar-meta{font-size:12px;color:var(--muted);margin-top:2px}
+  .ar-top{display:flex;align-items:center;gap:10px}
+  .ar-conf{border:none;background:none;cursor:pointer;font-size:16px;line-height:1;padding:0;flex-shrink:0}
+  .ar-name{flex:1;min-width:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ar-edit{display:flex;gap:8px}
+  .ar-edit input{
+    flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+    font-family:'Lexend';font-size:13px;color:var(--ink);background:#fff;
+  }
+  .ar-edit input:focus{outline:none;border-color:var(--ink)}
   .ar-outcome{
     flex-shrink:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;
     font-family:'Lexend';font-size:13px;font-weight:600;color:var(--ink);background:#fff;cursor:pointer;
@@ -409,9 +418,11 @@
     <div class="appt-form">
       <div class="af-title">Add appointment</div>
       <select id="apRep"></select>
-      <input type="date" id="apDay">
       <input id="apName" placeholder="Customer first name" onkeydown="if(event.key==='Enter')addAppt()">
-      <input id="apTime" placeholder="Time (e.g. 2pm)" onkeydown="if(event.key==='Enter')addAppt()">
+      <div class="af-row">
+        <label class="af-field"><span>Date</span><input type="date" id="apDay"></label>
+        <label class="af-field"><span>Time</span><input type="time" id="apTime"></label>
+      </div>
       <button onclick="addAppt()">Add appointment</button>
       <div class="af-note" id="apNote"></div>
     </div>
@@ -583,6 +594,20 @@ function parseTime(s){
   if(ap==='am'&&h===12) h=0;
   return h*60+min;
 }
+// Friendly display: "6pm", "9:30am". Accepts "18:00" or "6pm"; passes through junk.
+function formatTime(t){
+  if(!t) return '';
+  const m=parseTime(t); if(m>=1e9) return String(t);
+  const h=Math.floor(m/60), min=m%60, ap=h>=12?'pm':'am';
+  const h12=(h%12)||12;
+  return `${h12}${min?':'+String(min).padStart(2,'0'):''}${ap}`;
+}
+// Value for a <input type="time"> ("HH:MM"), from either stored format.
+function toTimeInput(t){
+  if(!t) return '';
+  const m=parseTime(t); if(m>=1e9) return '';
+  return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+}
 
 function addRep(){
   const el=document.getElementById('repInput');
@@ -605,7 +630,7 @@ function addAppt(){
   state.appts.push({id:uid(),repId,date,name,time,confirmed:false});
   // Confirm the save — future dates won't show on the 3-day board yet.
   const note=document.getElementById('apNote');
-  if(note) note.textContent=`Added ✓  ${name} · ${shortDate(date)}${time?` · ${time}`:''}`;
+  if(note) note.textContent=`Added ✓  ${name} · ${shortDate(date)}${time?` · ${formatTime(time)}`:''}`;
   document.getElementById('apName').value='';
   document.getElementById('apTime').value='';
   document.getElementById('apName').focus();
@@ -633,7 +658,7 @@ Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
   addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab,
-  openRep, closeRep, setOutcome
+  openRep, closeRep, setOutcome, setApptDate, setApptTime
 });
 
 function renderBoard(){
@@ -705,6 +730,15 @@ function setOutcome(id,v){
   const a=state.appts.find(x=>x.id===id);if(!a)return;
   a.outcome=v;save();render();
 }
+// Reschedule an existing appointment.
+function setApptDate(id,v){
+  const a=state.appts.find(x=>x.id===id);if(!a||!v)return;
+  a.date=v;save();render();
+}
+function setApptTime(id,v){
+  const a=state.appts.find(x=>x.id===id);if(!a)return;
+  a.time=v;save();render();
+}
 
 // Build a local Date from a "YYYY-MM-DD" key (avoids UTC shift).
 function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d);}
@@ -727,13 +761,16 @@ function renderRepModal(){
   const list = appts.length ? appts.map(a=>{
     const oc=a.outcome||'pending';
     const opts=OUTCOMES.map(o=>`<option value="${o.v}" ${oc===o.v?'selected':''}>${o.label}</option>`).join('');
-    const meta=`${shortDate(a.date)}${a.time?` · ${esc(a.time)}`:''}`;
     return `<div class="ar">
-      <div class="ar-main">
-        <div class="ar-name">${esc(a.name)} ${a.confirmed?'✅':'❌'}</div>
-        <div class="ar-meta">${meta}</div>
+      <div class="ar-top">
+        <button class="ar-conf" title="Toggle confirmed" onclick="toggleAppt('${a.id}')">${a.confirmed?'✅':'❌'}</button>
+        <span class="ar-name">${esc(a.name)}</span>
+        <select class="ar-outcome oc-${oc}" onchange="setOutcome('${a.id}',this.value)">${opts}</select>
       </div>
-      <select class="ar-outcome oc-${oc}" onchange="setOutcome('${a.id}',this.value)">${opts}</select>
+      <div class="ar-edit">
+        <input type="date" value="${a.date}" onchange="setApptDate('${a.id}',this.value)">
+        <input type="time" value="${toTimeInput(a.time)}" onchange="setApptTime('${a.id}',this.value)">
+      </div>
     </div>`;
   }).join('') : `<div class="pl-empty" style="padding:22px">No appointments logged yet.</div>`;
 
@@ -788,7 +825,7 @@ function renderPipe(){
     const rows = reps.length ? reps.map(r=>{
       const list=dayAppts.filter(a=>a.repId===r.id).sort((a,b)=>parseTime(a.time)-parseTime(b.time));
       const chips=list.map(a=>{
-        const t=a.time?` · ${esc(a.time)}`:'';
+        const t=a.time?` · ${esc(formatTime(a.time))}`:'';
         return `<span class="appt">
           <span class="atxt" title="Tap to toggle confirmed" onclick="toggleAppt('${a.id}')">${esc(a.name)}${t} ${a.confirmed?'✅':'❌'}</span>
           <button class="ax" title="Remove" onclick="removeAppt('${a.id}')">&times;</button>
