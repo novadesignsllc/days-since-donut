@@ -236,7 +236,7 @@
   }
   .ar-outcome:focus{outline:none;border-color:var(--ink)}
   .ar-outcome.oc-sold{color:#1a7f42;border-color:#8fe0ac;background:#eafbf0}
-  .ar-outcome.oc-nosale{color:#9a6a00;border-color:#f0d68f;background:#fdf6e3}
+  .ar-outcome.oc-nosale,.ar-outcome.oc-failed{color:#9a6a00;border-color:#f0d68f;background:#fdf6e3}
   .ar-outcome.oc-noshow,.ar-outcome.oc-cancelled{color:#b3402c;border-color:#f0b3a8;background:#fdeee9}
 
   /* ==================================================================
@@ -737,13 +737,15 @@ const OUTCOMES=[
   {v:'pending',  label:'Pending'},
   {v:'sold',     label:'Sold ✅'},
   {v:'nosale',   label:'Sat · No Sale'},
+  {v:'failed',   label:'Failed Credit'},
   {v:'noshow',   label:'No Show'},
   {v:'cancelled',label:'Cancelled'}
 ];
-// Sits = they sat down (sold or no-sale). Sales = sold. Leads = every appt.
+// Sits = they sat down (sold, no-sale, or failed credit). Sales = sold. Leads = every appt.
+const SIT_OUTCOMES=['sold','nosale','failed'];
 function repStats(id){
   const appts=state.appts.filter(a=>a.repId===id);
-  const sits=appts.filter(a=>a.outcome==='sold'||a.outcome==='nosale').length;
+  const sits=appts.filter(a=>SIT_OUTCOMES.includes(a.outcome)).length;
   const sales=appts.filter(a=>a.outcome==='sold').length;
   return {leads:appts.length, sits, sales, close: sits?Math.round(sales/sits*100)+'%':'—'};
 }
