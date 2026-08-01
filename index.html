@@ -1063,21 +1063,52 @@ function importEdit(i,field,val){ if(importRows[i]) importRows[i][field]=val; }
 function importToggle(i){ if(importRows[i]){ importRows[i].confirmed=!importRows[i].confirmed; renderImportPreview(); } }
 function importRemove(i){ importRows.splice(i,1); renderImportPreview(); }
 
+// Normalize a name/time to a comparison key so duplicates line up.
+function nameKey(s){ return firstNames(s).toLowerCase(); }
+function timeKey(t){ const m=parseTime(t); return m>=1e9?'':m; }
+
 function importCommit(){
-  let n=0;
+  let added=0, skipped=0, rescheduled=0;
   const today=ymd(nextDays(1)[0]);
   importRows.forEach(r=>{
     const name=(r.name||'').trim();
     const rep=repByFirstName(r.rep);
     if(!name || !rep) return;
+    const nm=nameKey(name);
+    const date=r.date||today;
+    const time=r.time||'';
+
+    // 1) Exact same customer + date + time already exists → skip (no re-import).
+    if(state.appts.some(a=> nameKey(a.name)===nm && a.date===date && timeKey(a.time)===timeKey(time))){
+      skipped++; return;
+    }
+    // 2) Same customer with the same rep but a different date/time → reschedule
+    //    the existing one (keep its outcome; update date/time/confirmed).
+    const mine=state.appts.filter(a=> a.repId===rep.id && nameKey(a.name)===nm);
+    if(mine.length){
+      const target=mine.sort((a,b)=> a.date<b.date?1 : a.date>b.date?-1 : 0)[0];
+      target.date=date; target.time=time; target.confirmed=!!r.confirmed;
+      rescheduled++; return;
+    }
+    // 3) Brand new appointment.
     state.appts.push({
-      id:uid(), repId:rep.id, date:r.date||today,
-      name:firstNames(name), time:r.time||'', confirmed:!!r.confirmed
+      id:uid(), repId:rep.id, date, name:firstNames(name), time, confirmed:!!r.confirmed
     });
-    n++;
+    added++;
   });
   save();render();
-  closeImport();
+
+  // Summarize what happened; keep the modal open so it's visible.
+  importRows=[];
+  renderImportPreview();
+  const st=document.getElementById('impStatus');
+  if(st){
+    const parts=[];
+    if(added) parts.push(`${added} added`);
+    if(rescheduled) parts.push(`${rescheduled} rescheduled`);
+    if(skipped) parts.push(`${skipped} skipped (already logged)`);
+    st.textContent = parts.length ? `Done — ${parts.join(' · ')}.` : 'Nothing to import.';
+  }
 }
 function removeAppt(id){
   state.appts=state.appts.filter(a=>a.id!==id);save();render();
