@@ -740,6 +740,17 @@ function titleCase(s){
       : w.charAt(0).toUpperCase()+w.slice(1)
   ).join(' ');
 }
+// Customer names: first names only. Split on connectors (and / & / +) so a
+// couple keeps each first name — "John and Jill Doe" -> "John and Jill",
+// "Shari Konn" -> "Shari" — then drop every surname.
+function firstNames(s){
+  const parts=String(s||'').trim().split(/\s*(?:\band\b|&|\+)\s*/i).filter(Boolean);
+  const firsts=parts.map(p=>{
+    const w=(p.trim().split(/\s+/)[0]||'');
+    return w ? w.charAt(0).toUpperCase()+w.slice(1) : '';
+  }).filter(Boolean);
+  return firsts.join(' and ');
+}
 // "2pm" / "10:30am" / "14:00" -> "HH:MM" (matches our slot format). '' if unusable.
 function normTime(t){
   if(!t) return '';
@@ -814,7 +825,7 @@ function quickAdd(){
     if(!rep){ rep={id:uid(),name:titleCase(p.rep)}; state.reps.push(rep); }
     state.appts.push({
       id:uid(), repId:rep.id, date:p.date||today,
-      name:titleCase(p.name), time:p.time, confirmed:p.confirmed
+      name:firstNames(p.name), time:p.time, confirmed:p.confirmed
     });
     added++;
   });
@@ -865,7 +876,7 @@ function importParseLines(text){
     // Confirmation Status sits between the email and the "Qualified" column.
     const status=String(rest||'').replace(/\b(not\s+)?(dis)?qualified\b/ig,'').trim();
     rows.push({
-      name:titleCase(name.trim()),
+      name:firstNames(name),
       date, time,
       rep:titleCase(rep.trim()),
       confirmed:/\bconfirmed\b/i.test(status)
