@@ -38,7 +38,7 @@
   .side-head h1{font-size:15px;font-weight:700;letter-spacing:.01em}
   .side-head p{font-size:12px;color:var(--muted);font-weight:400;margin-top:2px}
 
-  .addbar{padding:0 16px 14px;display:flex;gap:8px}
+  .addbar{padding:12px 16px;display:flex;gap:8px;border-top:1px solid var(--line);flex-shrink:0}
   .addbar input{
     flex:1;padding:10px 12px;border:1px solid var(--line);border-radius:10px;
     font-family:'Lexend';font-size:14px;font-weight:400;color:var(--ink);
@@ -88,6 +88,26 @@
   .main{flex:1;display:flex;flex-direction:column;align-items:center;padding:40px 24px 90px;min-height:calc(100vh - 56px)}
   .board{width:100%;max-width:440px}
   .board-title{font-size:15px;font-weight:600;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);margin-bottom:20px;text-align:center;line-height:1.5;text-wrap:balance}
+
+  /* ---------- PIPELINE: board header w/ action buttons ---------- */
+  .pipe-head{
+    display:flex;align-items:center;justify-content:space-between;gap:14px;
+    margin-bottom:22px;flex-wrap:wrap;
+  }
+  .pipe-head .board-title{margin-bottom:0;text-align:left}
+  .pipe-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .pa-btn{
+    border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;
+    padding:9px 13px;font-family:'Lexend';font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;
+    transition:.12s;
+  }
+  .pa-btn:hover{border-color:var(--ink)}
+  .pa-btn.primary{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .pa-btn.primary:hover{opacity:.88}
+
+  /* forms shown inside a modal (Add appointment / Quick add) */
+  .modal-sm{max-width:440px}
+  .modal .appt-form{border-top:none;padding:14px 22px 22px}
 
   .card{
     display:flex;align-items:baseline;justify-content:space-between;gap:14px;
@@ -459,29 +479,48 @@
 
 <!-- ============ PIPELINE VIEW ============ -->
 <div class="view" id="view-pipeline">
-  <!-- LEFT SIDEBAR -->
+  <!-- LEFT SIDEBAR — rep roster only -->
   <aside class="sidebar">
     <div class="side-head">
-      <h1>Pipeline</h1>
-      <p>Manage reps and log appointments for the next 3 days.</p>
+      <h1>Reps</h1>
+      <p>Tap a rep for their appointments &amp; outcomes.</p>
     </div>
+    <div class="people" id="repList"></div>
     <div class="addbar">
       <input id="repInput" placeholder="Add a rep" onkeydown="if(event.key==='Enter')addRep()">
       <button onclick="addRep()">+</button>
     </div>
-    <div class="people" id="repList"></div>
-    <div class="appt-form quick-add">
-      <div class="af-title">Quick add ⚡</div>
-      <textarea id="qaBox" rows="2" placeholder="samantha and john 2pm 8/30 confirmed david&#10;bob 3pm 7/31 unconfirmed antwan"></textarea>
-      <button onclick="quickAdd()">Add from text</button>
-      <div class="qa-hint">One appointment per line:<br>
-        <code>name(s) · time · date · confirmed/unconfirmed · rep</code><br>
-        Time &amp; date optional (date defaults to today). New reps are created automatically.</div>
-      <div class="af-note" id="qaNote"></div>
-      <button class="imp-open" onclick="openImport()">📷 Import from screenshot</button>
+  </aside>
+
+  <!-- MIDDLE BOARD -->
+  <main class="main">
+    <div class="board pipe-wrap">
+      <div class="pipe-head">
+        <div class="board-title">Our Pipeline · Next 3 Days</div>
+        <div class="pipe-actions">
+          <button class="pa-btn primary" onclick="openAppt()">+ Appointment</button>
+          <button class="pa-btn" onclick="openQuick()">⚡ Quick add</button>
+          <button class="pa-btn" onclick="openImport()">📷 Import</button>
+        </div>
+      </div>
+      <div id="pipeBoard"></div>
+    </div>
+  </main>
+</div>
+
+<!-- ============ REP DETAIL MODAL ============ -->
+<div class="modal-overlay" id="repModal" hidden onclick="if(event.target===this)closeRep()">
+  <div class="modal" id="repModalBody"></div>
+</div>
+
+<!-- ============ ADD APPOINTMENT MODAL ============ -->
+<div class="modal-overlay" id="apptModal" hidden onclick="if(event.target===this)closeAppt()">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h2>Add appointment</h2>
+      <button class="modal-x" title="Close" onclick="closeAppt()">&times;</button>
     </div>
     <div class="appt-form">
-      <div class="af-title">Add appointment</div>
       <select id="apRep"></select>
       <input id="apName" placeholder="Customer first name" onkeydown="if(event.key==='Enter')addAppt()">
       <div class="af-row">
@@ -491,21 +530,25 @@
       <button onclick="addAppt()">Add appointment</button>
       <div class="af-note" id="apNote"></div>
     </div>
-    <div class="side-foot">Pipeline · v1.2.0</div>
-  </aside>
-
-  <!-- MIDDLE BOARD -->
-  <main class="main">
-    <div class="board pipe-wrap">
-      <div class="board-title">Our Pipeline · Next 3 Days</div>
-      <div id="pipeBoard"></div>
-    </div>
-  </main>
+  </div>
 </div>
 
-<!-- ============ REP DETAIL MODAL ============ -->
-<div class="modal-overlay" id="repModal" hidden onclick="if(event.target===this)closeRep()">
-  <div class="modal" id="repModalBody"></div>
+<!-- ============ QUICK ADD MODAL ============ -->
+<div class="modal-overlay" id="quickModal" hidden onclick="if(event.target===this)closeQuick()">
+  <div class="modal modal-sm">
+    <div class="modal-head">
+      <h2>Quick add ⚡</h2>
+      <button class="modal-x" title="Close" onclick="closeQuick()">&times;</button>
+    </div>
+    <div class="appt-form quick-add">
+      <textarea id="qaBox" rows="3" placeholder="samantha and john 2pm 8/30 confirmed david&#10;bob 3pm 7/31 unconfirmed antwan"></textarea>
+      <button onclick="quickAdd()">Add from text</button>
+      <div class="qa-hint">One appointment per line:<br>
+        <code>name(s) · time · date · confirmed/unconfirmed · rep</code><br>
+        Time &amp; date optional (date defaults to today). New reps are created automatically.</div>
+      <div class="af-note" id="qaNote"></div>
+    </div>
+  </div>
 </div>
 
 <!-- ============ IMPORT MODAL ============ -->
@@ -902,6 +945,21 @@ function importParseLines(text){
   return rows;
 }
 
+// Add-appointment & Quick-add live in modals now (keeps the sidebar clean).
+function openAppt(){
+  document.getElementById('apptModal').removeAttribute('hidden');
+  renderApptForm();
+  const n=document.getElementById('apNote'); if(n) n.textContent='';
+  requestAnimationFrame(()=>{const el=document.getElementById('apName'); if(el) el.focus();});
+}
+function closeAppt(){ document.getElementById('apptModal').setAttribute('hidden',''); }
+function openQuick(){
+  document.getElementById('quickModal').removeAttribute('hidden');
+  const n=document.getElementById('qaNote'); if(n) n.textContent='';
+  requestAnimationFrame(()=>{const el=document.getElementById('qaBox'); if(el) el.focus();});
+}
+function closeQuick(){ document.getElementById('quickModal').setAttribute('hidden',''); }
+
 function openImport(){
   const ov=document.getElementById('importModal');
   document.getElementById('importBody').innerHTML=`
@@ -1040,6 +1098,7 @@ Object.assign(window, {
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
   addRep, removeRep, addAppt, quickAdd, toggleAppt, removeAppt, switchTab,
   openRep, closeRep, setOutcome, setApptDate, setApptTime, renderApptForm,
+  openAppt, closeAppt, openQuick, closeQuick,
   openImport, closeImport, importFile, importParseText,
   importEdit, importToggle, importRemove, importCommit
 });
@@ -1239,6 +1298,8 @@ function renderPipe(){
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
   if(!document.getElementById('importModal').hasAttribute('hidden')){ closeImport(); return; }
+  if(!document.getElementById('apptModal').hasAttribute('hidden')){ closeAppt(); return; }
+  if(!document.getElementById('quickModal').hasAttribute('hidden')){ closeQuick(); return; }
   if(openRepId) closeRep();
 });
 
