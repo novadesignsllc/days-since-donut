@@ -132,6 +132,15 @@
   .person:hover .remove{opacity:.6}
   .remove:hover{opacity:1;color:#e5523b}
 
+  /* rename-rep pencil (mirrors .remove, neutral hover) */
+  .rep-edit{
+    background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;
+    opacity:0;transition:.12s;padding:0 2px;line-height:1;
+  }
+  .person:hover .rep-edit{opacity:.6}
+  .rep-edit:hover{opacity:1;color:var(--ink)}
+  @media (hover:none){.rep-edit{opacity:.5}}
+
   /* inline rename input */
   .name-edit{
     flex:1;min-width:0;padding:6px 8px;border:1px solid var(--ink);border-radius:8px;
@@ -255,10 +264,13 @@
   .ar-name{flex:1;min-width:0;font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .ar-edit{display:flex;gap:8px}
   .ar-edit input,.ar-edit select{
-    flex:1;min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;
+    min-width:0;padding:8px 10px;border:1px solid var(--line);border-radius:9px;
     font-family:'Lexend';font-size:13px;color:var(--ink);background:#fff;cursor:pointer;
   }
   .ar-edit input:focus,.ar-edit select:focus{outline:none;border-color:var(--ink)}
+  .ar-f{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+  .ar-f span{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.02em;padding-left:2px}
+  .ar-f select,.ar-f input{width:100%;flex:0 0 auto}
   .ar-outcome{
     flex-shrink:0;padding:7px 10px;border:1px solid var(--line);border-radius:9px;
     font-family:'Lexend';font-size:13px;font-weight:600;color:var(--ink);background:#fff;cursor:pointer;
@@ -1128,7 +1140,8 @@ Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
   addRep, removeRep, addAppt, quickAdd, toggleAppt, removeAppt, switchTab,
-  openRep, closeRep, setOutcome, setApptDate, setApptTime, renderApptForm,
+  startRepRename, commitRepRename, cancelRepRename,
+  openRep, closeRep, setOutcome, setApptDate, setApptTime, setApptRep, renderApptForm,
   openAppt, closeAppt, openQuick, closeQuick,
   openImport, closeImport, importFile, importParseText,
   importEdit, importToggle, importRemove, importCommit
@@ -1166,15 +1179,24 @@ function renderBoard(){
   }).join('');
 }
 
+let editingRepId=null;
 function renderReps(){
   const host=document.getElementById('repList');
   if(state.reps.length===0){
-    host.innerHTML=`<div class="side-empty">No reps yet. Add one above to get started.</div>`;
+    host.innerHTML=`<div class="side-empty">No reps yet. Add one below to get started.</div>`;
     return;
   }
   host.innerHTML=state.reps.map(r=>{
+    if(editingRepId===r.id){
+      return `<div class="person">
+        <input class="name-edit" value="${esc(r.name)}"
+          onblur="commitRepRename('${r.id}',this.value)"
+          onkeydown="if(event.key==='Enter'){this.blur()}else if(event.key==='Escape'){cancelRepRename()}">
+      </div>`;
+    }
     const s=repStats(r.id);
     return `<div class="person">
+      <button class="rep-edit" title="Rename" onclick="startRepRename('${r.id}')">&#9998;</button>
       <button class="remove" title="Remove" onclick="removeRep('${r.id}')">&times;</button>
       <button class="rep-open" title="View appointments & outcomes" onclick="openRep('${r.id}')">
         <span class="name">${esc(r.name)}</span>
@@ -1183,6 +1205,20 @@ function renderReps(){
     </div>`;
   }).join('');
 }
+/* --------- rename reps (pencil / double-click) --------- */
+function startRepRename(id){
+  editingRepId=id;renderReps();
+  requestAnimationFrame(()=>{const el=document.querySelector('#repList .name-edit');if(el){el.focus();el.select();}});
+}
+function commitRepRename(id,val){
+  if(editingRepId!==id)return;
+  editingRepId=null;
+  const r=state.reps.find(x=>x.id===id);
+  const n=(val||'').trim();
+  if(r&&n)r.name=n;
+  save();render();
+}
+function cancelRepRename(){editingRepId=null;renderReps();}
 
 /* ---- rep outcomes: sits / sales / leads ---- */
 const OUTCOMES=[
@@ -1214,6 +1250,11 @@ function setApptTime(id,v){
   const a=state.appts.find(x=>x.id===id);if(!a)return;
   a.time=v;save();render();
 }
+// Reassign an appointment to a different rep.
+function setApptRep(id,repId){
+  const a=state.appts.find(x=>x.id===id);if(!a||!repId)return;
+  a.repId=repId;save();render();
+}
 
 // Build a local Date from a "YYYY-MM-DD" key (avoids UTC shift).
 function dateFromKey(k){const [y,m,d]=k.split('-').map(Number);return new Date(y,m-1,d);}
@@ -1236,6 +1277,7 @@ function renderRepModal(){
   const list = appts.length ? appts.map(a=>{
     const oc=a.outcome||'pending';
     const opts=OUTCOMES.map(o=>`<option value="${o.v}" ${oc===o.v?'selected':''}>${o.label}</option>`).join('');
+    const repOpts=state.reps.map(rr=>`<option value="${rr.id}" ${rr.id===a.repId?'selected':''}>${esc(rr.name)}</option>`).join('');
     return `<div class="ar">
       <div class="ar-top">
         <button class="ar-conf" title="Toggle confirmed" onclick="toggleAppt('${a.id}')">${a.confirmed?'✅':'❌'}</button>
@@ -1243,8 +1285,9 @@ function renderRepModal(){
         <select class="ar-outcome oc-${oc}" onchange="setOutcome('${a.id}',this.value)">${opts}</select>
       </div>
       <div class="ar-edit">
-        <input type="date" value="${a.date}" onchange="setApptDate('${a.id}',this.value)">
-        <select onchange="setApptTime('${a.id}',this.value)">${timeOptionsHtml(a.date,a.time,true)}</select>
+        <label class="ar-f"><span>Rep</span><select onchange="setApptRep('${a.id}',this.value)">${repOpts}</select></label>
+        <label class="ar-f"><span>Date</span><input type="date" value="${a.date}" onchange="setApptDate('${a.id}',this.value)"></label>
+        <label class="ar-f"><span>Time</span><select onchange="setApptTime('${a.id}',this.value)">${timeOptionsHtml(a.date,a.time,true)}</select></label>
       </div>
     </div>`;
   }).join('') : `<div class="pl-empty" style="padding:22px">No appointments logged yet.</div>`;
