@@ -149,6 +149,15 @@
     padding:10px 14px;font-family:'Lexend';font-size:14px;font-weight:600;cursor:pointer;
   }
   .appt-form button:hover{opacity:.85}
+  .appt-form textarea{
+    padding:9px 11px;border:1px solid var(--line);border-radius:10px;background:#fff;
+    font-family:'Lexend';font-size:14px;font-weight:400;color:var(--ink);
+    resize:vertical;min-height:46px;line-height:1.4;
+  }
+  .appt-form textarea:focus{outline:none;border-color:var(--ink)}
+  .qa-hint{font-size:11px;color:var(--muted);line-height:1.55;padding:0 2px}
+  .qa-hint code{font-family:ui-monospace,SFMono-Regular,monospace;font-size:10.5px;
+    background:var(--hover);padding:1px 4px;border-radius:5px;color:var(--ink)}
   .af-row{display:flex;gap:8px}
   .af-field{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
   .af-field span{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.02em;padding-left:2px}
@@ -415,6 +424,15 @@
       <button onclick="addRep()">+</button>
     </div>
     <div class="people" id="repList"></div>
+    <div class="appt-form quick-add">
+      <div class="af-title">Quick add ⚡</div>
+      <textarea id="qaBox" rows="2" placeholder="samantha and john 2pm 8/30 confirmed david&#10;bob 3pm 7/31 unconfirmed antwan"></textarea>
+      <button onclick="quickAdd()">Add from text</button>
+      <div class="qa-hint">One appointment per line:<br>
+        <code>name(s) · time · date · confirmed/unconfirmed · rep</code><br>
+        Time &amp; date optional (date defaults to today). New reps are created automatically.</div>
+      <div class="af-note" id="qaNote"></div>
+    </div>
     <div class="appt-form">
       <div class="af-title">Add appointment</div>
       <select id="apRep"></select>
@@ -661,6 +679,100 @@ function toggleAppt(id){
   const a=state.appts.find(x=>x.id===id);if(!a)return;
   a.confirmed=!a.confirmed;save();render();
 }
+
+/* --------- Quick add: parse free-text lines into appointments --------- */
+// Nicely capitalize a name, keeping small joining words ("and", "&") lowercase.
+function titleCase(s){
+  return s.split(' ').filter(Boolean).map((w,i)=>
+    (i>0 && /^(and|&|the|of)$/i.test(w)) ? w.toLowerCase()
+      : w.charAt(0).toUpperCase()+w.slice(1)
+  ).join(' ');
+}
+// "2pm" / "10:30am" / "14:00" -> "HH:MM" (matches our slot format). '' if unusable.
+function normTime(t){
+  if(!t) return '';
+  const m=parseTime(t); if(m>=1e9) return '';
+  return `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+}
+// "8/30" or "8/30/26" -> "YYYY-MM-DD". No year: assume this year, but roll to
+// next year if the date is far in the past (handles Dec→Jan). '' if unparseable.
+function mdToKey(md){
+  const m=String(md).match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?$/);
+  if(!m) return '';
+  const mo=+m[1], da=+m[2];
+  if(mo<1||mo>12||da<1||da>31) return '';
+  let yr;
+  if(m[3]){ yr=+m[3]; if(yr<100) yr+=2000; }
+  else{
+    const today=new Date(); today.setHours(0,0,0,0);
+    yr=today.getFullYear();
+    const cand=new Date(yr,mo-1,da);
+    if((today-cand)/86400000 > 180) yr+=1;
+  }
+  return `${yr}-${String(mo).padStart(2,'0')}-${String(da).padStart(2,'0')}`;
+}
+// Parse one line like "samantha and john 2pm 8/30 confirmed david".
+// Returns {name, time, date, confirmed, rep}. Order is flexible; the
+// confirmed/unconfirmed word (when present) separates customer from rep.
+function parseQuickAppt(raw){
+  let s=' '+String(raw).trim().replace(/\s+/g,' ')+' ';
+  const res={name:'',time:'',date:'',confirmed:false,rep:''};
+  const cut=(m)=>{ s=s.slice(0,m.index)+' '+s.slice(m.index+m[0].length); };
+
+  // time (2pm, 2:30pm, 14:00) — pulled first so it can't be mistaken for a name
+  const tm=s.match(/\s(\d{1,2}(?::\d{2})?\s*(?:am|pm)|\d{1,2}:\d{2})\s/i);
+  if(tm){ res.time=normTime(tm[1].replace(/\s+/g,'')); cut(tm); }
+
+  // date (8/30, 8/30/26)
+  const dt=s.match(/\s(\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)\s/);
+  if(dt){ res.date=mdToKey(dt[1]); cut(dt); }
+
+  // confirmed / unconfirmed — everything after it is the rep
+  const cf=s.match(/\s(unconfirmed|confirmed|unconf|confirm|conf|yes|no)\s/i);
+  if(cf){
+    res.confirmed=/^(confirmed|confirm|conf|yes)$/i.test(cf[1]);
+    res.rep=s.slice(cf.index+cf[0].length).trim();
+    s=s.slice(0,cf.index)+' ';
+  }
+
+  // drop filler words; whatever's left is the customer name
+  s=s.replace(/\s(on|at|@|for|with)\s/gi,' ').replace(/\s+/g,' ').trim();
+
+  // no explicit confirmed-word rep? take the trailing word as the rep
+  if(!res.rep){
+    const parts=s.split(' ').filter(Boolean);
+    if(parts.length>1){ res.rep=parts.pop(); s=parts.join(' '); }
+  }
+  res.name=s.trim();
+  return res;
+}
+function quickAdd(){
+  const box=document.getElementById('qaBox');
+  const note=document.getElementById('qaNote');
+  const lines=box.value.split('\n').map(l=>l.trim()).filter(Boolean);
+  if(!lines.length){ if(note) note.textContent=''; return; }
+
+  let added=0; const fails=[];
+  const today=ymd(nextDays(1)[0]);
+  lines.forEach(line=>{
+    const p=parseQuickAppt(line);
+    if(!p.name || !p.rep){ fails.push(line); return; }
+    // find an existing rep (case-insensitive) or create one on the fly
+    let rep=state.reps.find(r=>r.name.toLowerCase()===p.rep.toLowerCase());
+    if(!rep){ rep={id:uid(),name:titleCase(p.rep)}; state.reps.push(rep); }
+    state.appts.push({
+      id:uid(), repId:rep.id, date:p.date||today,
+      name:titleCase(p.name), time:p.time, confirmed:p.confirmed
+    });
+    added++;
+  });
+
+  save();render();
+  box.value=fails.join('\n');                 // leave only the lines we couldn't read
+  if(note) note.textContent =
+    (added?`Added ${added} appointment${added===1?'':'s'} ✓`:'Nothing added')
+    + (fails.length?` · ${fails.length} line${fails.length===1?'':'s'} couldn't be read`:'');
+}
 function removeAppt(id){
   state.appts=state.appts.filter(a=>a.id!==id);save();render();
 }
@@ -678,7 +790,7 @@ function render(){renderBoard();renderReps();renderApptForm();renderPipe();rende
 Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
-  addRep, removeRep, addAppt, toggleAppt, removeAppt, switchTab,
+  addRep, removeRep, addAppt, quickAdd, toggleAppt, removeAppt, switchTab,
   openRep, closeRep, setOutcome, setApptDate, setApptTime, renderApptForm
 });
 
