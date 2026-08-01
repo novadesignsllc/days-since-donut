@@ -248,6 +248,52 @@
   .ar-outcome.oc-nosale,.ar-outcome.oc-failed{color:#9a6a00;border-color:#f0d68f;background:#fdf6e3}
   .ar-outcome.oc-noshow,.ar-outcome.oc-cancelled{color:#b3402c;border-color:#f0b3a8;background:#fdeee9}
 
+  /* ---------- PIPELINE: import-from-screenshot ---------- */
+  .imp-open{
+    border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:10px;
+    padding:9px 14px;font-family:'Lexend';font-size:13px;font-weight:600;cursor:pointer;
+  }
+  .imp-open:hover{border-color:var(--ink)}
+  .imp-intro{padding:6px 22px 4px;display:flex;flex-direction:column;gap:10px}
+  .imp-tip{font-size:13px;color:var(--muted);line-height:1.5}
+  .imp-file{
+    display:inline-block;background:var(--ink);color:#fff;border-radius:10px;
+    padding:9px 14px;font-size:13px;font-weight:600;cursor:pointer;align-self:flex-start;
+  }
+  .imp-file:hover{opacity:.85}
+  #impPaste{
+    min-height:58px;padding:9px 11px;border:1px solid var(--line);border-radius:10px;
+    font-family:'Lexend';font-size:13px;color:var(--ink);resize:vertical;
+  }
+  #impPaste:focus{outline:none;border-color:var(--ink)}
+  .imp-parsebtn{
+    align-self:flex-start;border:1px solid var(--line);background:#fff;border-radius:10px;
+    padding:8px 12px;font-family:'Lexend';font-size:13px;font-weight:600;color:var(--ink);cursor:pointer;
+  }
+  .imp-parsebtn:hover{border-color:var(--ink)}
+  .imp-status{font-size:12px;font-weight:600;color:#2e9e5b;min-height:16px;line-height:1.4}
+  .imp-preview{padding:2px 16px 8px}
+  .imp-head-row,.imp-row{
+    display:grid;grid-template-columns:1.5fr 1.1fr .85fr 1.1fr 32px 24px;gap:6px;align-items:center;
+  }
+  .imp-head-row{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding:6px 6px 3px}
+  .imp-row{padding:3px 6px}
+  .imp-row input{
+    padding:6px 8px;border:1px solid var(--line);border-radius:8px;
+    font-family:'Lexend';font-size:12px;color:var(--ink);min-width:0;background:#fff;
+  }
+  .imp-row input:focus{outline:none;border-color:var(--ink)}
+  .imp-conf{border:1px solid var(--line);background:#fff;border-radius:8px;padding:5px 0;font-size:14px;cursor:pointer}
+  .imp-x{border:none;background:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1}
+  .imp-x:hover{color:#e5523b}
+  .imp-foot{position:sticky;bottom:0;background:#fff;padding:12px 22px 18px;border-top:1px solid var(--line);margin-top:6px}
+  #impDoBtn{
+    width:100%;border:none;background:var(--ink);color:#fff;border-radius:10px;
+    padding:11px 14px;font-family:'Lexend';font-size:14px;font-weight:700;cursor:pointer;
+  }
+  #impDoBtn:hover{opacity:.85}
+  #impDoBtn:disabled{opacity:.4;cursor:default}
+
   /* ==================================================================
      DONUTS — "Sugar Rush" candy theme. Everything here is scoped to
      #view-donuts so the Pipeline tab is completely unaffected.
@@ -432,6 +478,7 @@
         <code>name(s) · time · date · confirmed/unconfirmed · rep</code><br>
         Time &amp; date optional (date defaults to today). New reps are created automatically.</div>
       <div class="af-note" id="qaNote"></div>
+      <button class="imp-open" onclick="openImport()">📷 Import from screenshot</button>
     </div>
     <div class="appt-form">
       <div class="af-title">Add appointment</div>
@@ -459,6 +506,11 @@
 <!-- ============ REP DETAIL MODAL ============ -->
 <div class="modal-overlay" id="repModal" hidden onclick="if(event.target===this)closeRep()">
   <div class="modal" id="repModalBody"></div>
+</div>
+
+<!-- ============ IMPORT MODAL ============ -->
+<div class="modal-overlay" id="importModal" hidden onclick="if(event.target===this)closeImport()">
+  <div class="modal" id="importBody"></div>
 </div>
 
 <!-- ============ BOTTOM TAB BAR ============ -->
@@ -773,6 +825,175 @@ function quickAdd(){
     (added?`Added ${added} appointment${added===1?'':'s'} ✓`:'Nothing added')
     + (fails.length?` · ${fails.length} line${fails.length===1?'':'s'} couldn't be read`:'');
 }
+
+/* --------- Import from screenshot (OCR) or pasted table text --------- */
+// Lazily pull in Tesseract.js only when the import tool is first used.
+let tessPromise=null;
+function ensureTesseract(){
+  if(window.Tesseract) return Promise.resolve();
+  if(tessPromise) return tessPromise;
+  tessPromise=new Promise((res,rej)=>{
+    const sc=document.createElement('script');
+    sc.src='https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
+    sc.onload=()=>res(); sc.onerror=()=>rej(new Error('could not load OCR library'));
+    document.head.appendChild(sc);
+  });
+  return tessPromise;
+}
+
+// One data row of the Opp Details table. Anchored on landmarks so column
+// drift in OCR doesn't matter: [lead] name [creationDate] [scheduled date+time]
+// [oppNo] employee email [confirmation status] [qualification].
+const ROW_RE=/^\s*\S+\s+(.+?)\s+\d{1,2}\/\d{1,2}\/\d{2,4}\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])\.?\s?M\.?\s+\S+\s+(.+?)\s+[\w.+-]+@[\w.-]+\s*(.*)$/i;
+
+let importRows=[];
+
+function importParseLines(text){
+  const rows=[];
+  String(text||'').split('\n').forEach(raw=>{
+    const L=raw.replace(/\s+/g,' ').trim();
+    if(!L) return;
+    const m=L.match(ROW_RE);
+    if(!m) return;
+    const [,name,mo,da,yr,h,min,ap,rep,rest]=m;
+    let H=+h; const pm=/p/i.test(ap);
+    if(pm && H!==12) H+=12;
+    if(!pm && H===12) H=0;
+    let year=+yr; if(year<100) year+=2000;
+    const date=`${year}-${String(+mo).padStart(2,'0')}-${String(+da).padStart(2,'0')}`;
+    const time=`${String(H).padStart(2,'0')}:${min}`;
+    // Confirmation Status sits between the email and the "Qualified" column.
+    const status=String(rest||'').replace(/\b(not\s+)?(dis)?qualified\b/ig,'').trim();
+    rows.push({
+      name:titleCase(name.trim()),
+      date, time,
+      rep:titleCase(rep.trim()),
+      confirmed:/\bconfirmed\b/i.test(status)
+    });
+  });
+  return rows;
+}
+
+function openImport(){
+  const ov=document.getElementById('importModal');
+  document.getElementById('importBody').innerHTML=`
+    <div class="modal-head">
+      <h2>Import appointments 📷</h2>
+      <button class="modal-x" title="Close" onclick="closeImport()">&times;</button>
+    </div>
+    <div class="imp-intro">
+      <p class="imp-tip">Upload or paste a screenshot of your Opp Details table — or paste the copied rows as text. Everything is reviewed below before it's added.</p>
+      <label class="imp-file">Choose screenshot…<input type="file" accept="image/*" onchange="importFile(event)" hidden></label>
+      <textarea id="impPaste" placeholder="…or paste a screenshot here (Cmd/Ctrl-V), or paste the table text"></textarea>
+      <button class="imp-parsebtn" onclick="importParseText()">Parse pasted text</button>
+      <div class="imp-status" id="impStatus"></div>
+    </div>
+    <div class="imp-preview" id="impPreview"></div>
+    <div class="imp-foot"><button id="impDoBtn" onclick="importCommit()" disabled>Import</button></div>`;
+  ov.removeAttribute('hidden');
+  importRows=[];
+  renderImportPreview();
+  const ta=document.getElementById('impPaste');
+  ta.addEventListener('paste',importPasteHandler);
+  ta.focus();
+}
+function closeImport(){
+  document.getElementById('importModal').setAttribute('hidden','');
+  importRows=[];
+}
+
+function importFile(ev){
+  const f=ev.target.files && ev.target.files[0];
+  if(f) importOCR(f);
+}
+function importPasteHandler(ev){
+  const items=(ev.clipboardData && ev.clipboardData.items) || [];
+  for(const it of items){
+    if(it.type && it.type.indexOf('image')===0){
+      ev.preventDefault();
+      const f=it.getAsFile();
+      if(f) importOCR(f);
+      return;
+    }
+  }
+  // otherwise: let the text paste land in the box, user hits "Parse pasted text"
+}
+async function importOCR(src){
+  const st=document.getElementById('impStatus');
+  if(st) st.textContent='Loading OCR…';
+  try{
+    await ensureTesseract();
+    if(st) st.textContent='Reading image…';
+    const {data}=await window.Tesseract.recognize(src,'eng',{
+      logger:m=>{ if(m.status==='recognizing text' && st) st.textContent=`Reading image… ${Math.round(m.progress*100)}%`; }
+    });
+    importRows=importParseLines(data.text);
+    renderImportPreview();
+    if(st) st.textContent = importRows.length
+      ? `Found ${importRows.length} appointment${importRows.length===1?'':'s'} — review & edit, then Import.`
+      : `Couldn't read any rows. Try a larger/clearer screenshot, or paste the table text below.`;
+  }catch(err){
+    if(st) st.textContent='OCR failed: '+(err.message||err);
+  }
+}
+function importParseText(){
+  const st=document.getElementById('impStatus');
+  const txt=document.getElementById('impPaste').value;
+  importRows=importParseLines(txt);
+  renderImportPreview();
+  if(st) st.textContent = importRows.length
+    ? `Found ${importRows.length} appointment${importRows.length===1?'':'s'} — review & edit, then Import.`
+    : `Couldn't read any rows from that text.`;
+}
+
+function renderImportPreview(){
+  const host=document.getElementById('impPreview');
+  const btn=document.getElementById('impDoBtn');
+  if(!host) return;
+  if(!importRows.length){
+    host.innerHTML='';
+    if(btn){btn.textContent='Import';btn.disabled=true;}
+    return;
+  }
+  host.innerHTML=`<div class="imp-head-row">
+      <span>Customer</span><span>Date</span><span>Time</span><span>Rep</span><span>Conf</span><span></span>
+    </div>`+ importRows.map((r,i)=>`
+    <div class="imp-row">
+      <input value="${esc(r.name)}" oninput="importEdit(${i},'name',this.value)">
+      <input type="date" value="${r.date}" oninput="importEdit(${i},'date',this.value)">
+      <input type="time" value="${r.time}" oninput="importEdit(${i},'time',this.value)">
+      <input value="${esc(r.rep)}" oninput="importEdit(${i},'rep',this.value)">
+      <button class="imp-conf" title="Toggle confirmed" onclick="importToggle(${i})">${r.confirmed?'✅':'❌'}</button>
+      <button class="imp-x" title="Remove row" onclick="importRemove(${i})">&times;</button>
+    </div>`).join('');
+  if(btn){
+    const n=importRows.length;
+    btn.textContent=`Import ${n} appointment${n===1?'':'s'}`;
+    btn.disabled=false;
+  }
+}
+// oninput edits update the model in place (no re-render → inputs keep focus).
+function importEdit(i,field,val){ if(importRows[i]) importRows[i][field]=val; }
+function importToggle(i){ if(importRows[i]){ importRows[i].confirmed=!importRows[i].confirmed; renderImportPreview(); } }
+function importRemove(i){ importRows.splice(i,1); renderImportPreview(); }
+
+function importCommit(){
+  let n=0;
+  const today=ymd(nextDays(1)[0]);
+  importRows.forEach(r=>{
+    const name=(r.name||'').trim(), repName=(r.rep||'').trim();
+    if(!name || !repName) return;
+    let rep=state.reps.find(x=>x.name.toLowerCase()===repName.toLowerCase());
+    if(!rep){ rep={id:uid(),name:titleCase(repName)}; state.reps.push(rep); }
+    state.appts.push({
+      id:uid(), repId:rep.id, date:r.date||today,
+      name:titleCase(name), time:r.time||'', confirmed:!!r.confirmed
+    });
+    n++;
+  });
+  save();render();
+  closeImport();
+}
 function removeAppt(id){
   state.appts=state.appts.filter(a=>a.id!==id);save();render();
 }
@@ -791,7 +1012,9 @@ Object.assign(window, {
   addPerson, removePerson, bump, dec, reset,
   startRename, commitRename, cancelRename, toggleAdd, closeAdd,
   addRep, removeRep, addAppt, quickAdd, toggleAppt, removeAppt, switchTab,
-  openRep, closeRep, setOutcome, setApptDate, setApptTime, renderApptForm
+  openRep, closeRep, setOutcome, setApptDate, setApptTime, renderApptForm,
+  openImport, closeImport, importFile, importParseText,
+  importEdit, importToggle, importRemove, importCommit
 });
 
 function renderBoard(){
@@ -985,8 +1208,12 @@ function renderPipe(){
   }).join('');
 }
 
-// Esc closes the rep detail modal.
-document.addEventListener('keydown',e=>{if(e.key==='Escape'&&openRepId)closeRep();});
+// Esc closes whichever modal is open.
+document.addEventListener('keydown',e=>{
+  if(e.key!=='Escape') return;
+  if(!document.getElementById('importModal').hasAttribute('hidden')){ closeImport(); return; }
+  if(openRepId) closeRep();
+});
 
 // Restore the last-used tab, then paint.
 switchTab(localStorage.getItem(TAB_KEY) || 'donuts');
