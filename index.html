@@ -742,14 +742,26 @@ function titleCase(s){
 }
 // Customer names: first names only. Split on connectors (and / & / +) so a
 // couple keeps each first name — "John and Jill Doe" -> "John and Jill",
-// "Shari Konn" -> "Shari" — then drop every surname.
+// "Shari Konn" -> "Shari" — then drop every surname. Ignores stray tokens
+// that carry no letters (e.g. an OCR'd "|" border).
 function firstNames(s){
   const parts=String(s||'').trim().split(/\s*(?:\band\b|&|\+)\s*/i).filter(Boolean);
   const firsts=parts.map(p=>{
-    const w=(p.trim().split(/\s+/)[0]||'');
-    return w ? w.charAt(0).toUpperCase()+w.slice(1) : '';
+    const tok=(p.trim().split(/\s+/).find(w=>/[A-Za-z]/.test(w))||'').replace(/^[^A-Za-z]+/,'');
+    return tok ? tok.charAt(0).toUpperCase()+tok.slice(1) : '';
   }).filter(Boolean);
   return firsts.join(' and ');
+}
+// Match a rep by first name against the existing list (so "David" maps to an
+// already-added "David Wilson" instead of duplicating). Adds a first-name-only
+// rep only when there's no match at all.
+function repByFirstName(raw){
+  const fn=(String(raw||'').trim().split(/\s+/).find(w=>/[A-Za-z]/.test(w))||'').replace(/^[^A-Za-z]+/,'');
+  if(!fn) return null;
+  const key=fn.toLowerCase();
+  let rep=state.reps.find(r=>((r.name||'').trim().split(/\s+/)[0]||'').toLowerCase()===key);
+  if(!rep){ rep={id:uid(),name:titleCase(fn)}; state.reps.push(rep); }
+  return rep;
 }
 // "2pm" / "10:30am" / "14:00" -> "HH:MM" (matches our slot format). '' if unusable.
 function normTime(t){
@@ -820,9 +832,9 @@ function quickAdd(){
   lines.forEach(line=>{
     const p=parseQuickAppt(line);
     if(!p.name || !p.rep){ fails.push(line); return; }
-    // find an existing rep (case-insensitive) or create one on the fly
-    let rep=state.reps.find(r=>r.name.toLowerCase()===p.rep.toLowerCase());
-    if(!rep){ rep={id:uid(),name:titleCase(p.rep)}; state.reps.push(rep); }
+    // match an existing rep by first name, or add a new first-name rep
+    const rep=repByFirstName(p.rep);
+    if(!rep){ fails.push(line); return; }
     state.appts.push({
       id:uid(), repId:rep.id, date:p.date||today,
       name:firstNames(p.name), time:p.time, confirmed:p.confirmed
@@ -855,30 +867,35 @@ function ensureTesseract(){
 // One data row of the Opp Details table. Anchored on landmarks so column
 // drift in OCR doesn't matter: [lead] name [creationDate] [scheduled date+time]
 // [oppNo] employee email [confirmation status] [qualification].
-const ROW_RE=/^\s*\S+\s+(.+?)\s+\d{1,2}\/\d{1,2}\/\d{2,4}\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])\.?\s?M\.?\s+\S+\s+(.+?)\s+[\w.+-]+@[\w.-]+\s*(.*)$/i;
+// The rep is taken from the email local part (first.last@…) — the one clean
+// signal for that column — so an OCR-mangled opportunity number can't bleed in.
+const ROW_RE=/^\s*\S+\s+(.+?)\s+\d{1,2}\/\d{1,2}\/\d{2,4}\s+(\d{1,2})\/(\d{1,2})\/(\d{2,4})\s+(\d{1,2}):(\d{2})(?::\d{2})?\s*([AP])\.?\s?M\.?\s+.+?\s+([\w.+-]+)@[\w.-]+\s*(.*)$/i;
 
 let importRows=[];
 
 function importParseLines(text){
   const rows=[];
   String(text||'').split('\n').forEach(raw=>{
-    const L=raw.replace(/\s+/g,' ').trim();
+    // Drop OCR'd column borders ("|") before parsing.
+    const L=raw.replace(/\|/g,' ').replace(/\s+/g,' ').trim();
     if(!L) return;
     const m=L.match(ROW_RE);
     if(!m) return;
-    const [,name,mo,da,yr,h,min,ap,rep,rest]=m;
+    const [,name,mo,da,yr,h,min,ap,emailLocal,rest]=m;
     let H=+h; const pm=/p/i.test(ap);
     if(pm && H!==12) H+=12;
     if(!pm && H===12) H=0;
     let year=+yr; if(year<100) year+=2000;
     const date=`${year}-${String(+mo).padStart(2,'0')}-${String(+da).padStart(2,'0')}`;
     const time=`${String(H).padStart(2,'0')}:${min}`;
+    // Rep first name from the email (rose.terra@… -> Rose).
+    const repFirst=String(emailLocal||'').split(/[._]/)[0].replace(/[^A-Za-z]/g,'');
     // Confirmation Status sits between the email and the "Qualified" column.
     const status=String(rest||'').replace(/\b(not\s+)?(dis)?qualified\b/ig,'').trim();
     rows.push({
       name:firstNames(name),
       date, time,
-      rep:titleCase(rep.trim()),
+      rep:repFirst ? repFirst.charAt(0).toUpperCase()+repFirst.slice(1) : '',
       confirmed:/\bconfirmed\b/i.test(status)
     });
   });
@@ -992,13 +1009,12 @@ function importCommit(){
   let n=0;
   const today=ymd(nextDays(1)[0]);
   importRows.forEach(r=>{
-    const name=(r.name||'').trim(), repName=(r.rep||'').trim();
-    if(!name || !repName) return;
-    let rep=state.reps.find(x=>x.name.toLowerCase()===repName.toLowerCase());
-    if(!rep){ rep={id:uid(),name:titleCase(repName)}; state.reps.push(rep); }
+    const name=(r.name||'').trim();
+    const rep=repByFirstName(r.rep);
+    if(!name || !rep) return;
     state.appts.push({
       id:uid(), repId:rep.id, date:r.date||today,
-      name:titleCase(name), time:r.time||'', confirmed:!!r.confirmed
+      name:firstNames(name), time:r.time||'', confirmed:!!r.confirmed
     });
     n++;
   });
