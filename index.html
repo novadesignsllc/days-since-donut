@@ -327,6 +327,64 @@
   #impDoBtn:disabled{opacity:.4;cursor:default}
 
   /* ==================================================================
+     CT LEADERBOARD — spreadsheet-style scoreboard. Scoped to
+     #view-leaderboard so the other two tabs are untouched.
+     ================================================================== */
+  .lb-main{padding:32px 20px 90px;align-items:center}
+  .lb-wrap{width:100%;max-width:940px}
+  .lb-cards{display:flex;gap:14px;justify-content:center;margin-bottom:24px;flex-wrap:wrap}
+  .lb-card{
+    flex:1;min-width:150px;max-width:250px;border:3px solid #111;border-radius:8px;
+    padding:12px 10px;text-align:center;background:#efefef;
+  }
+  .lb-card .lb-cl{display:block;font-size:15px;font-weight:800;letter-spacing:.04em;color:#111}
+  .lb-card .lb-cn{display:block;font-size:32px;font-weight:800;color:#111;margin-top:2px;line-height:1}
+  .lb-card.sits{background:#7ba7d6}
+  .lb-card.sales{background:#8ecb8f}
+  .lb-card.leads{background:#efefef}
+
+  .lb-headbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:12px;flex-wrap:wrap}
+  .lb-title{font-size:18px;font-weight:800;color:#111}
+  .lb-titlein{
+    padding:8px 11px;border:1px solid var(--line);border-radius:9px;
+    font-family:'Lexend';font-size:15px;font-weight:600;color:#111;
+  }
+  .lb-titlein:focus{outline:none;border-color:#111}
+
+  .lb-tablewrap{overflow-x:auto;border:2px solid #111;border-radius:6px}
+  .lb-table{border-collapse:collapse;width:100%;min-width:660px;font-size:14px}
+  .lb-table th,.lb-table td{border:1px solid #cfcfcf;padding:7px 8px;text-align:center;white-space:nowrap}
+  .lb-table thead th{border-color:#111;font-weight:800;color:#111}
+  .lb-rankh,.lb-nameh,.lb-leadsh{background:#e9e9ec}
+  .lb-nameh{text-align:left}
+  .lb-rank{background:#f2f2f4;color:#555;font-weight:600;width:34px}
+  .lb-name{background:#fafafa;text-align:left;font-weight:600;color:#111}
+  .lb-leads{background:#fff;font-weight:700}
+  .lb-n{font-weight:800;color:#111;width:36px}
+  .lb-p{font-weight:700;color:#111}
+  .lb-in{
+    width:100%;min-width:0;padding:5px 6px;border:1px solid var(--line);border-radius:7px;
+    font-family:'Lexend';font-size:13px;color:#111;background:#fff;text-align:center;
+  }
+  .lb-in.nm{text-align:left}
+  .lb-in.num{width:66px}
+  .lb-in:focus{outline:none;border-color:#111}
+  .lb-del button{color:var(--muted);font-size:18px}
+
+  /* import preview */
+  .lbimp-row{display:grid;grid-template-columns:44px 1.4fr repeat(6,.82fr) 26px;gap:5px;align-items:center;padding:3px 8px}
+  .lbimp-head{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding-top:8px}
+  .lbimp-row input{
+    padding:6px 7px;border:1px solid var(--line);border-radius:7px;
+    font-family:'Lexend';font-size:12px;color:#111;min-width:0;background:#fff;text-align:center;
+  }
+  .lbimp-row input:focus{outline:none;border-color:#111}
+  .lbimp-badge{font-size:9px;font-weight:800;text-align:center;border-radius:5px;padding:3px 0;color:#fff}
+  .lbimp-badge.new{background:#2e9e5b}
+  .lbimp-badge.changed{background:#d08a1e}
+  .lbimp-badge.same{background:#b9bcc2}
+
+  /* ==================================================================
      DONUTS — "Sugar Rush" candy theme. Everything here is scoped to
      #view-donuts so the Pipeline tab is completely unaffected.
      ================================================================== */
@@ -520,6 +578,18 @@
   </main>
 </div>
 
+<!-- ============ CT LEADERBOARD VIEW ============ -->
+<div class="view" id="view-leaderboard">
+  <main class="main lb-main">
+    <div class="lb-wrap" id="lbWrap"></div>
+  </main>
+</div>
+
+<!-- ============ LEADERBOARD IMPORT MODAL ============ -->
+<div class="modal-overlay" id="lbImportModal" hidden onclick="if(event.target===this)lbCloseImport()">
+  <div class="modal" id="lbImportBody"></div>
+</div>
+
 <!-- ============ REP DETAIL MODAL ============ -->
 <div class="modal-overlay" id="repModal" hidden onclick="if(event.target===this)closeRep()">
   <div class="modal" id="repModalBody"></div>
@@ -572,6 +642,7 @@
 <nav class="tabbar">
   <button class="tab active" data-tab="donuts" onclick="switchTab('donuts')">🍩 Donuts</button>
   <button class="tab" data-tab="pipeline" onclick="switchTab('pipeline')">📋 Pipeline</button>
+  <button class="tab" data-tab="leaderboard" onclick="switchTab('leaderboard')">🏆 Leaderboard</button>
 </nav>
 
 <script type="module">
@@ -602,9 +673,11 @@ const boardRef = doc(db, "boards", BOARD_ID);
 function normalize(s){
   s = s || {};
   return {
-    people: Array.isArray(s.people) ? s.people : [],   // donut counter
-    reps:   Array.isArray(s.reps)   ? s.reps   : [],   // pipeline reps
-    appts:  Array.isArray(s.appts)  ? s.appts  : []    // pipeline appointments
+    people:  Array.isArray(s.people)  ? s.people  : [],   // donut counter
+    reps:    Array.isArray(s.reps)    ? s.reps    : [],   // pipeline reps
+    appts:   Array.isArray(s.appts)   ? s.appts   : [],   // pipeline appointments
+    leaders: Array.isArray(s.leaders) ? s.leaders : [],   // CT leaderboard rows
+    lbDate:  typeof s.lbDate==='string' ? s.lbDate : ''   // leaderboard date label
   };
 }
 
@@ -623,7 +696,8 @@ function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','
 // Must write ALL fields so saving one tool never wipes the other's data.
 function save(){
   cache();
-  setDoc(boardRef, {people: state.people, reps: state.reps, appts: state.appts})
+  setDoc(boardRef, {people: state.people, reps: state.reps, appts: state.appts,
+                    leaders: state.leaders, lbDate: state.lbDate})
     .catch(err=>console.warn('save failed', err));
 }
 
@@ -1126,6 +1200,278 @@ function removeAppt(id){
   state.appts=state.appts.filter(a=>a.id!==id);save();render();
 }
 
+/* ===================== CT LEADERBOARD ===================== */
+// Each rep row stores COUNTS only; every percentage on the board is derived
+// as count ÷ leads. Columns, left→right, with their accent colors.
+const LB_METRICS=[
+  {key:'sdnd',    label:'SD/ND',     color:'#e8a83a'},
+  {key:'sdnddan', label:'SD/ND/DAN', color:'#e07f2e'},
+  {key:'confirms',label:'Confirms',  color:'#a94e77'},
+  {key:'sits',    label:'Sits',      color:'#4d8fcf'},
+  {key:'sales',   label:'Sales',     color:'#5aa85f'}
+];
+const LB_KEYS=['leads','sdnd','sdnddan','confirms','sits','sales'];
+function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${(n>>8)&255},${n&255},${a})`;}
+function lbPct(n,leads){return leads>0?Math.round((n/leads)*100)+'%':'0%';}
+
+function lbTotals(){
+  const sum=k=>state.leaders.reduce((t,r)=>t+(+r[k]||0),0);
+  return {leads:sum('leads'), sits:sum('sits'), sales:sum('sales')};
+}
+// Leaderboard order: most sales first, then most leads, then most sits.
+function lbSorted(){
+  return [...state.leaders].sort((a,b)=>
+    (+b.sales||0)-(+a.sales||0) || (+b.leads||0)-(+a.leads||0) || (+b.sits||0)-(+a.sits||0));
+}
+
+let lbEditing=false;
+function lbEditStart(){ lbEditing=true; renderLeaderboard(); }
+function lbDone(){
+  lbEditing=false;
+  state.leaders.forEach(r=>{
+    r.name=(r.name||'').trim();
+    LB_KEYS.forEach(k=>r[k]=Math.max(0,Math.round(+r[k]||0)));
+  });
+  state.leaders=lbSorted().filter(r=>r.name);   // drop blank rows, persist sorted
+  save(); renderLeaderboard();
+}
+function lbEditCell(i,k,v){ if(state.leaders[i]) state.leaders[i][k]= k==='name'?v:v; }
+function lbAddRow(){
+  state.leaders.push({id:uid(),name:'',leads:0,sdnd:0,sdnddan:0,confirms:0,sits:0,sales:0});
+  renderLeaderboard();
+  requestAnimationFrame(()=>{const els=document.querySelectorAll('#lbWrap .lb-in.nm');const el=els[els.length-1];if(el)el.focus();});
+}
+function lbRemoveRow(i){ state.leaders.splice(i,1); renderLeaderboard(); }
+function lbSetDate(v){ state.lbDate=v; }   // committed on Done
+
+function renderLeaderboard(){
+  const wrap=document.getElementById('lbWrap');
+  if(!wrap) return;
+  const t=lbTotals();
+  const cards=`<div class="lb-cards">
+    <div class="lb-card leads"><span class="lb-cl">LEADS</span><span class="lb-cn">${t.leads}</span></div>
+    <div class="lb-card sits"><span class="lb-cl">SITS</span><span class="lb-cn">${t.sits}</span></div>
+    <div class="lb-card sales"><span class="lb-cl">SALES</span><span class="lb-cn">${t.sales}</span></div>
+  </div>`;
+  const title = lbEditing
+    ? `<input class="lb-titlein" value="${esc(state.lbDate||'')}" placeholder="Date, e.g. July 23rd" oninput="lbSetDate(this.value)">`
+    : `<span class="lb-title">Leaderboard${state.lbDate?` (${esc(state.lbDate)})`:''}</span>`;
+  const actions = lbEditing
+    ? `<button class="pa-btn" onclick="lbAddRow()">+ Add rep</button>
+       <button class="pa-btn primary" onclick="lbDone()">✓ Done</button>`
+    : `<button class="pa-btn" onclick="lbEditStart()">✏️ Edit</button>
+       <button class="pa-btn" onclick="lbOpenImport()">📷 Import</button>`;
+  const board = (state.leaders.length||lbEditing)
+    ? lbTable()
+    : `<div class="main-empty"><h2>No leaderboard yet</h2>
+        <p>Tap <b>Edit</b> to add reps by hand,<br>or <b>Import</b> a Rep Productivity screenshot.</p></div>`;
+  wrap.innerHTML=`${cards}
+    <div class="lb-headbar"><div>${title}</div><div class="pipe-actions">${actions}</div></div>
+    ${board}`;
+}
+
+function lbTable(){
+  const rows = lbEditing ? state.leaders : lbSorted();
+  const heads = LB_METRICS.map(m=>`<th class="lb-mh" colspan="2" style="background:${rgba(m.color,.85)}">${m.label}</th>`).join('');
+  const head=`<thead><tr>
+      <th class="lb-rankh"></th><th class="lb-nameh">Name</th><th class="lb-leadsh">Leads</th>
+      ${heads}${lbEditing?'<th></th>':''}
+    </tr></thead>`;
+  const body = rows.map((r,i)=>{
+    const leads=+r.leads||0;
+    if(lbEditing){
+      const cells=LB_METRICS.map(m=>`<td colspan="2" style="background:${rgba(m.color,.14)}">
+          <input class="lb-in num" type="number" min="0" value="${+r[m.key]||0}" oninput="lbEditCell(${i},'${m.key}',this.value)"></td>`).join('');
+      return `<tr>
+        <td class="lb-rank">${i+1}</td>
+        <td class="lb-name"><input class="lb-in nm" value="${esc(r.name||'')}" oninput="lbEditCell(${i},'name',this.value)"></td>
+        <td class="lb-leads"><input class="lb-in num" type="number" min="0" value="${leads}" oninput="lbEditCell(${i},'leads',this.value)"></td>
+        ${cells}
+        <td class="lb-del"><button class="imp-x" title="Remove" onclick="lbRemoveRow(${i})">&times;</button></td>
+      </tr>`;
+    }
+    const cells=LB_METRICS.map(m=>{
+      const n=+r[m.key]||0;
+      const a=leads>0 ? 0.14+0.62*Math.min(1,n/leads) : 0.08;
+      return `<td class="lb-n" style="background:${rgba(m.color,.30)}">${n}</td>
+              <td class="lb-p" style="background:${rgba(m.color,a)}">${lbPct(n,leads)}</td>`;
+    }).join('');
+    return `<tr>
+      <td class="lb-rank">${i+1}</td>
+      <td class="lb-name">${esc(r.name||'')}</td>
+      <td class="lb-leads">${leads}</td>
+      ${cells}
+    </tr>`;
+  }).join('');
+  return `<div class="lb-tablewrap"><table class="lb-table">${head}<tbody>${body}</tbody></table></div>`;
+}
+
+/* --------- Leaderboard import (Rep Productivity screenshot / paste) --------- */
+// Build a leaderboard row from the productivity columns. `conf` is the
+// Confirmation % value; Confirms count = that % of leads. SD/ND/DAN is the
+// cumulative SDND + DAN. All values are editable in the review step.
+function lbMakeRow(name,leads,sdnd,dan,conf,sit,sales){
+  leads=Math.max(0,Math.round(leads||0));
+  sdnd=Math.max(0,Math.round(sdnd||0));
+  dan=Math.max(0,Math.round(dan||0));
+  return {
+    name:titleCase(String(name||'').trim()),
+    leads, sdnd, sdnddan:sdnd+dan,
+    confirms:Math.max(0,Math.round((conf||0)/100*leads)),
+    sits:Math.max(0,Math.round(sit||0)),
+    sales:Math.max(0,Math.round(sales||0))
+  };
+}
+// Parse the Rep Productivity table. Tab-separated lines (copied from the sheet)
+// map by exact column index; OCR/space lines anchor on "CT" + hire date then
+// read the numeric tokens positionally.
+function lbParseLines(text){
+  const out=[];
+  const num=x=>{const m=String(x==null?'':x).replace(/[, ]/g,'').match(/-?\d+(?:\.\d+)?/);return m?+m[0]:0;};
+  String(text||'').split('\n').forEach(raw=>{
+    let line=String(raw).replace(/ /g,' ');
+    if(/employee\s*name/i.test(line)) return;   // header row
+    if(/^\s*total\b/i.test(line)) return;        // totals row
+
+    if(line.indexOf('\t')>=0){                   // pasted straight from the sheet
+      const c=line.split('\t').map(s=>s.trim());
+      if(c.length<6 || !/[A-Za-z]/.test(c[0]||'')) return;
+      // 0 name … 5 Unique_Leads,6 Leads/Day,7 SDND,8 SDND%,9 DAN,10 DAN%,
+      // 11 Qualified%,12 Confirmation%,13 Sit Appt,14 Sit%,15 Sales
+      out.push(lbMakeRow(c[0], num(c[5]), num(c[7]), num(c[9]), num(c[12]), num(c[13]),
+                         num(c[15]!==undefined?c[15]:c[c.length-1])));
+      return;
+    }
+    const L=line.replace(/\|/g,' ').replace(/\s+/g,' ').trim();
+    if(!L) return;
+    const m=L.match(/^(.*?)\bCT\b.*?\b\d{1,2}\/\d{1,2}\/\d{2,4}\b(.*)$/i);
+    if(!m || !/[A-Za-z]/.test(m[1])) return;
+    const nums=(m[2].match(/-?\d+(?:\.\d+)?%?/g)||[]).map(x=>+x.replace('%',''));
+    if(nums.length<3) return;
+    const g=idx=>idx<nums.length?nums[idx]:0;
+    // 0 leads,1 leads/day,2 sdnd,3 sdnd%,4 dan,5 dan%,6 qual%,7 conf%,8 sit,9 sit%,10 sales
+    out.push(lbMakeRow(m[1], g(0), g(2), g(4), g(7), g(8), g(nums.length>10?10:nums.length-1)));
+  });
+  return out;
+}
+
+let lbImportRows=[];
+function lbOpenImport(){
+  const ov=document.getElementById('lbImportModal');
+  document.getElementById('lbImportBody').innerHTML=`
+    <div class="modal-head">
+      <h2>Import leaderboard 📷</h2>
+      <button class="modal-x" title="Close" onclick="lbCloseImport()">&times;</button>
+    </div>
+    <div class="imp-intro">
+      <p class="imp-tip">Upload or paste a screenshot of the <b>Rep Productivity</b> table — or copy the rows straight from the sheet and paste as text (most accurate).</p>
+      <p class="imp-tip" style="font-size:12px;line-height:1.5">Columns are matched automatically:<br>
+        Leads ← Unique Leads · SD/ND ← SDND · SD/ND/DAN ← SDND + DAN · Confirms ← Confirmation % × Leads · Sits ← Sit Appt · Sales ← Sales.<br>
+        Review &amp; fix anything below before importing.</p>
+      <label class="imp-file">Choose screenshot…<input type="file" accept="image/*" onchange="lbImportFile(event)" hidden></label>
+      <textarea id="lbImpPaste" placeholder="…or paste a screenshot here (Cmd/Ctrl-V), or paste the copied table rows"></textarea>
+      <button class="imp-parsebtn" onclick="lbImportParseText()">Parse pasted text</button>
+      <div class="imp-status" id="lbImpStatus"></div>
+    </div>
+    <div class="imp-preview" id="lbImpPreview"></div>
+    <div class="imp-foot"><button id="lbImpDoBtn" onclick="lbImportCommit()" disabled>Import</button></div>`;
+  ov.removeAttribute('hidden');
+  lbImportRows=[];
+  lbRenderImport();
+  const ta=document.getElementById('lbImpPaste');
+  ta.addEventListener('paste',lbImportPaste);
+  ta.focus();
+}
+function lbCloseImport(){ document.getElementById('lbImportModal').setAttribute('hidden',''); lbImportRows=[]; }
+function lbImportFile(ev){ const f=ev.target.files&&ev.target.files[0]; if(f) lbImportOCR(f); }
+function lbImportPaste(ev){
+  const items=(ev.clipboardData&&ev.clipboardData.items)||[];
+  for(const it of items){
+    if(it.type&&it.type.indexOf('image')===0){ ev.preventDefault(); const f=it.getAsFile(); if(f) lbImportOCR(f); return; }
+  }
+}
+async function lbImportOCR(src){
+  const st=document.getElementById('lbImpStatus');
+  if(st) st.textContent='Loading OCR…';
+  try{
+    await ensureTesseract();
+    if(st) st.textContent='Reading image…';
+    const {data}=await window.Tesseract.recognize(src,'eng',{
+      logger:m=>{ if(m.status==='recognizing text' && st) st.textContent=`Reading image… ${Math.round(m.progress*100)}%`; }
+    });
+    lbImportRows=lbParseLines(data.text);
+    lbRenderImport();
+    if(st) st.textContent = lbImportRows.length
+      ? `Found ${lbImportRows.length} rep${lbImportRows.length===1?'':'s'} — review & edit, then Import.`
+      : `Couldn't read any rows. Try a clearer screenshot, or paste the copied rows as text.`;
+  }catch(err){ if(st) st.textContent='OCR failed: '+(err.message||err); }
+}
+function lbImportParseText(){
+  const st=document.getElementById('lbImpStatus');
+  lbImportRows=lbParseLines(document.getElementById('lbImpPaste').value);
+  lbRenderImport();
+  if(st) st.textContent = lbImportRows.length
+    ? `Found ${lbImportRows.length} rep${lbImportRows.length===1?'':'s'} — review & edit, then Import.`
+    : `Couldn't read any rows from that text.`;
+}
+function lbFindCurrent(name){
+  const k=String(name||'').trim().toLowerCase();
+  return state.leaders.find(r=>String(r.name||'').trim().toLowerCase()===k);
+}
+function lbRowStatus(r){
+  const cur=lbFindCurrent(r.name);
+  if(!cur) return 'new';
+  return LB_KEYS.every(k=>(+cur[k]||0)===(+r[k]||0)) ? 'same' : 'changed';
+}
+function lbRenderImport(){
+  const host=document.getElementById('lbImpPreview');
+  const btn=document.getElementById('lbImpDoBtn');
+  if(!host) return;
+  if(!lbImportRows.length){ host.innerHTML=''; if(btn){btn.textContent='Import';btn.disabled=true;} return; }
+  const cols=[['name','Name'],['leads','Leads'],['sdnd','SD/ND'],['sdnddan','SD/ND/DAN'],['confirms','Confirms'],['sits','Sits'],['sales','Sales']];
+  const head=`<div class="lbimp-row lbimp-head"><span>Δ</span>${cols.map(c=>`<span>${c[1]}</span>`).join('')}<span></span></div>`;
+  const body=lbImportRows.map((r,i)=>{
+    const stt=lbRowStatus(r);
+    const badge=stt==='new'?'NEW':stt==='changed'?'CHG':'=';
+    const inputs=cols.map(c=> c[0]==='name'
+      ? `<input value="${esc(r.name||'')}" oninput="lbImportEdit(${i},'name',this.value)">`
+      : `<input type="number" min="0" value="${+r[c[0]]||0}" oninput="lbImportEdit(${i},'${c[0]}',this.value)">`).join('');
+    return `<div class="lbimp-row"><span class="lbimp-badge ${stt}" title="${stt}">${badge}</span>${inputs}<button class="imp-x" title="Remove" onclick="lbImportRemove(${i})">&times;</button></div>`;
+  }).join('');
+  host.innerHTML=head+body;
+  if(btn){ const n=lbImportRows.length; btn.textContent=`Import ${n} rep${n===1?'':'s'}`; btn.disabled=false; }
+}
+function lbImportEdit(i,k,v){ if(lbImportRows[i]) lbImportRows[i][k]= k==='name'?v:Math.max(0,Math.round(+v||0)); }
+function lbImportRemove(i){ lbImportRows.splice(i,1); lbRenderImport(); }
+// Import is a full-roster snapshot: it replaces the leaderboard, keeping the
+// id of any rep that already existed (matched by name) and re-sorting.
+function lbImportCommit(){
+  const rows=lbImportRows.filter(r=>String(r.name||'').trim());
+  const st=document.getElementById('lbImpStatus');
+  if(!rows.length){ if(st) st.textContent='Nothing to import.'; return; }
+  let added=0, changed=0, same=0;
+  const next=rows.map(r=>{
+    const stt=lbRowStatus(r);
+    if(stt==='new') added++; else if(stt==='changed') changed++; else same++;
+    const cur=lbFindCurrent(r.name);
+    return {
+      id:cur?cur.id:uid(), name:titleCase(String(r.name||'').trim()),
+      leads:+r.leads||0, sdnd:+r.sdnd||0, sdnddan:+r.sdnddan||0,
+      confirms:+r.confirms||0, sits:+r.sits||0, sales:+r.sales||0
+    };
+  });
+  state.leaders=next.sort((a,b)=>(b.sales-a.sales)||(b.leads-a.leads)||(b.sits-a.sits));
+  save(); renderLeaderboard();
+  lbImportRows=[]; lbRenderImport();
+  if(st){
+    const p=[];
+    if(added) p.push(`${added} new`);
+    if(changed) p.push(`${changed} updated`);
+    if(same) p.push(`${same} unchanged`);
+    st.textContent=`Imported ${rows.length} rep${rows.length===1?'':'s'} — ${p.join(' · ')}. Leaderboard replaced.`;
+  }
+}
+
 // Tab switching (persisted so a refresh stays on the same tool).
 function switchTab(name){
   try{localStorage.setItem(TAB_KEY,name);}catch(e){}
@@ -1133,7 +1479,7 @@ function switchTab(name){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===name));
 }
 
-function render(){renderBoard();renderReps();renderApptForm();renderPipe();renderRepModal();}
+function render(){renderBoard();renderReps();renderApptForm();renderPipe();renderRepModal();renderLeaderboard();}
 
 // Inline onclick handlers live on window; module scope is private by default.
 Object.assign(window, {
@@ -1144,7 +1490,10 @@ Object.assign(window, {
   openRep, closeRep, setOutcome, setApptDate, setApptTime, setApptRep, renderApptForm,
   openAppt, closeAppt, openQuick, closeQuick,
   openImport, closeImport, importFile, importParseText,
-  importEdit, importToggle, importRemove, importCommit
+  importEdit, importToggle, importRemove, importCommit,
+  lbEditStart, lbDone, lbEditCell, lbAddRow, lbRemoveRow, lbSetDate,
+  lbOpenImport, lbCloseImport, lbImportFile, lbImportParseText,
+  lbImportEdit, lbImportRemove, lbImportCommit
 });
 
 function renderBoard(){
@@ -1371,6 +1720,7 @@ function renderPipe(){
 // Esc closes whichever modal is open.
 document.addEventListener('keydown',e=>{
   if(e.key!=='Escape') return;
+  if(!document.getElementById('lbImportModal').hasAttribute('hidden')){ lbCloseImport(); return; }
   if(!document.getElementById('importModal').hasAttribute('hidden')){ closeImport(); return; }
   if(!document.getElementById('apptModal').hasAttribute('hidden')){ closeAppt(); return; }
   if(!document.getElementById('quickModal').hasAttribute('hidden')){ closeQuick(); return; }
