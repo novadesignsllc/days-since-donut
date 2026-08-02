@@ -371,6 +371,22 @@
   .lb-in:focus{outline:none;border-color:#111}
   .lb-del button{color:var(--muted);font-size:18px}
 
+  /* trending-to-goal panel */
+  .lb-goal{margin-top:24px;border:2px solid #111;border-radius:10px;padding:16px 16px 14px;background:#f6faf6}
+  .lb-goal-top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .lb-goal-h{font-size:16px;font-weight:800;color:#111}
+  .lb-goal-sub{font-size:12px;font-weight:600;color:var(--muted)}
+  .lb-bar{position:relative;height:28px;border-radius:8px;background:#eceef0;overflow:hidden;margin-bottom:14px;border:1px solid var(--line)}
+  .lb-bar-proj{position:absolute;left:0;top:0;bottom:0;background:rgba(90,168,95,.30)}
+  .lb-bar-fill{position:absolute;left:0;top:0;bottom:0;background:#5aa85f}
+  .lb-bar-label{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#0e3a1c}
+  .lb-goal-cards{display:flex;gap:10px;flex-wrap:wrap}
+  .lb-gc{flex:1;min-width:108px;background:#fff;border:1px solid var(--line);border-radius:9px;padding:10px 8px;text-align:center}
+  .lb-gc b{display:block;font-size:26px;font-weight:800;color:#111;line-height:1}
+  .lb-gc span{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-top:4px}
+  .lb-goal-note{margin-top:12px;font-size:13px;font-weight:600;color:#8a6d1e;line-height:1.5}
+  .lb-goal-note.good{color:#1a7f42}
+
   /* import preview */
   .lbimp-row{display:grid;grid-template-columns:44px 1.4fr repeat(6,.82fr) 26px;gap:5px;align-items:center;padding:3px 8px}
   .lbimp-head{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;padding-top:8px}
@@ -1211,6 +1227,8 @@ const LB_METRICS=[
   {key:'sales',   label:'Sales',     color:'#5aa85f'}
 ];
 const LB_KEYS=['leads','sdnd','sdnddan','confirms','sits','sales'];
+const LB_GOAL_SALES=25;   // team goal
+const LB_CONV=0.5;        // assume 50% of sits become sales
 function rgba(hex,a){const n=parseInt(hex.slice(1),16);return `rgba(${n>>16&255},${(n>>8)&255},${n&255},${a})`;}
 function lbPct(n,leads){return leads>0?Math.round((n/leads)*100)+'%':'0%';}
 
@@ -1223,6 +1241,18 @@ function lbSorted(){
   return [...state.leaders].sort((a,b)=>
     (+b.sales||0)-(+a.sales||0) || (+b.leads||0)-(+a.leads||0) || (+b.sits||0)-(+a.sits||0));
 }
+// One row per name (case-insensitive). If a name repeats, the later row's data
+// wins but the first row's id is kept, so we never show two reps with one name.
+function lbDedupe(rows){
+  const map=new Map();
+  rows.forEach(r=>{
+    const k=String(r.name||'').trim().toLowerCase();
+    if(!k) return;
+    const prev=map.get(k);
+    map.set(k, prev ? {...r, id:prev.id} : r);
+  });
+  return [...map.values()];
+}
 
 let lbEditing=false;
 function lbEditStart(){ lbEditing=true; renderLeaderboard(); }
@@ -1232,6 +1262,7 @@ function lbDone(){
     r.name=(r.name||'').trim();
     LB_KEYS.forEach(k=>r[k]=Math.max(0,Math.round(+r[k]||0)));
   });
+  state.leaders=lbDedupe(state.leaders);        // collapse duplicate names
   state.leaders=lbSorted().filter(r=>r.name);   // drop blank rows, persist sorted
   save(); renderLeaderboard();
 }
@@ -1265,9 +1296,45 @@ function renderLeaderboard(){
     ? lbTable()
     : `<div class="main-empty"><h2>No leaderboard yet</h2>
         <p>Tap <b>Edit</b> to add reps by hand,<br>or <b>Import</b> a Rep Productivity screenshot.</p></div>`;
+  const goal = (!lbEditing && state.leaders.length) ? lbGoalPanel(t) : '';
   wrap.innerHTML=`${cards}
     <div class="lb-headbar"><div>${title}</div><div class="pipe-actions">${actions}</div></div>
-    ${board}`;
+    ${board}
+    ${goal}`;
+}
+
+// Progress toward the team goal. Goal is LB_GOAL_SALES sales, assuming
+// LB_CONV of sits convert — so hitting the goal needs goal/LB_CONV sits.
+// "Trending sales" is what the sits booked so far project to at that rate.
+function lbGoalPanel(t){
+  const goal=LB_GOAL_SALES, conv=LB_CONV, pctc=Math.round(conv*100);
+  const sitsNeeded=Math.ceil(goal/conv);              // sits required for the goal
+  const projSales=Math.round(t.sits*conv);            // trending sales from booked sits
+  const salesLeft=Math.max(0,goal-t.sales);
+  const sitsLeft=Math.max(0,Math.ceil(salesLeft/conv));
+  const pct=Math.min(100,Math.round(t.sales/goal*100));
+  const projPct=Math.min(100,Math.round(projSales/goal*100));
+  const onPace=projSales>=goal;
+  return `<div class="lb-goal">
+    <div class="lb-goal-top">
+      <span class="lb-goal-h">📈 Trending to Goal</span>
+      <span class="lb-goal-sub">Goal: ${goal} sales · assumes ${pctc}% of sits close (${sitsNeeded} sits)</span>
+    </div>
+    <div class="lb-bar">
+      <div class="lb-bar-proj" style="width:${projPct}%" title="Trending from sits booked"></div>
+      <div class="lb-bar-fill" style="width:${pct}%"></div>
+      <span class="lb-bar-label">${t.sales} / ${goal} sales</span>
+    </div>
+    <div class="lb-goal-cards">
+      <div class="lb-gc"><b>${t.sits}</b><span>Sits booked</span></div>
+      <div class="lb-gc"><b>${projSales}</b><span>Trending sales (${pctc}%)</span></div>
+      <div class="lb-gc"><b>${salesLeft}</b><span>Sales to goal</span></div>
+      <div class="lb-gc"><b>${sitsLeft}</b><span>More sits needed</span></div>
+    </div>
+    <div class="lb-goal-note ${onPace?'good':''}">${onPace
+      ? `On track — the ${t.sits} sits booked trend to ${projSales} sales, at or above the ${goal} goal. 🎯`
+      : `Book ${sitsLeft} more sit${sitsLeft===1?'':'s'} (${sitsNeeded} total) to trend to the ${goal}-sale goal.`}</div>
+  </div>`;
 }
 
 function lbTable(){
@@ -1324,7 +1391,7 @@ function lbMakeRow(name,leads,sdnd,dan,conf,sit,sales){
 }
 // Parse the Rep Productivity table. Tab-separated lines (copied from the sheet)
 // map by exact column index; OCR/space lines anchor on "CT" + hire date then
-// read the numeric tokens positionally.
+// classify tokens (integers = counts, decimals/%'s = rates) to survive drift.
 function lbParseLines(text){
   const out=[];
   const num=x=>{const m=String(x==null?'':x).replace(/[, ]/g,'').match(/-?\d+(?:\.\d+)?/);return m?+m[0]:0;};
@@ -1346,11 +1413,19 @@ function lbParseLines(text){
     if(!L) return;
     const m=L.match(/^(.*?)\bCT\b.*?\b\d{1,2}\/\d{1,2}\/\d{2,4}\b(.*)$/i);
     if(!m || !/[A-Za-z]/.test(m[1])) return;
-    const nums=(m[2].match(/-?\d+(?:\.\d+)?%?/g)||[]).map(x=>+x.replace('%',''));
-    if(nums.length<3) return;
-    const g=idx=>idx<nums.length?nums[idx]:0;
-    // 0 leads,1 leads/day,2 sdnd,3 sdnd%,4 dan,5 dan%,6 qual%,7 conf%,8 sit,9 sit%,10 sales
-    out.push(lbMakeRow(m[1], g(0), g(2), g(4), g(7), g(8), g(nums.length>10?10:nums.length-1)));
+    // Classify tokens instead of trusting position: the count columns
+    // (Unique Leads, SDND, DAN, Sit Appt, Sales) are whole integers, while the
+    // rate columns (Leads/Day + the five %'s) always carry a decimal or "%".
+    // So "33.3" can never be read as a Sit count — it's a rate.
+    const toks=m[2].match(/\d+(?:\.\d+)?%?/g)||[];
+    const ints=[], rates=[];
+    toks.forEach(t=>{ (/[.%]/.test(t) ? rates : ints).push(parseFloat(t)); });
+    if(ints.length<4) return;                     // need at least leads…sit
+    // ints: Unique Leads, SDND, DAN, Sit Appt, Sales
+    const leads=ints[0], sdnd=ints[1]||0, dan=ints[2]||0, sit=ints[3]||0, sales=ints[4]!=null?ints[4]:0;
+    // rates: Leads/Day, SDND%, DAN%, Qualified%, Confirmation%, Sit% → conf = rates[4]
+    const conf = rates.length>=5 ? rates[4] : (rates.length?rates[rates.length-1]:0);
+    out.push(lbMakeRow(m[1], leads, sdnd, dan, conf, sit, sales));
   });
   return out;
 }
@@ -1460,7 +1535,7 @@ function lbImportCommit(){
       confirms:+r.confirms||0, sits:+r.sits||0, sales:+r.sales||0
     };
   });
-  state.leaders=next.sort((a,b)=>(b.sales-a.sales)||(b.leads-a.leads)||(b.sits-a.sits));
+  state.leaders=lbDedupe(next).sort((a,b)=>(b.sales-a.sales)||(b.leads-a.leads)||(b.sits-a.sits));
   save(); renderLeaderboard();
   lbImportRows=[]; lbRenderImport();
   if(st){
